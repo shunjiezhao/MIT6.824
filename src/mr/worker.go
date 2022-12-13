@@ -1,10 +1,12 @@
 package mr
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 import "log"
 import "net/rpc"
 import "hash/fnv"
-
 
 //
 // Map functions return a slice of KeyValue.
@@ -24,7 +26,6 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-
 //
 // main/mrworker.go calls this function.
 //
@@ -32,10 +33,52 @@ func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
 	// Your worker implementation here.
+	// 1. 注册
+	workerID := Register()
 
+	var tp WorkerType
+	var id int // id 是map 或者 reduce 的第几号任务
+	var masterS bool
+	for true {
+		tp, id, masterS = Ask(workerID)
+		if masterS == false { // master 结束工作 任务完成
+			log.Printf("worker: %v receive master down\n", workerID)
+			return
+		}
+
+		if tp.CanWork() { // 后备任务
+			break //可以工作了
+		}
+		time.Sleep(1 * time.Second)
+	}
+	// 有工作
+	log.Printf("worker:%v start %v:%v work \n", workerID, tp.String(), id)
 	// uncomment to send the Example RPC to the coordinator.
-	// CallExample()
+}
 
+// 返回工人编号
+func Register() WorkerID {
+	args := RegReq{}
+	reply := RegResp{}
+	ok := call("Coordinator.Register", &args, &reply)
+	if ok {
+		log.Printf("client receive: %v\n", reply)
+	} else {
+		log.Printf("call failed!\n")
+	}
+	return reply.Id
+}
+func Ask(workerID WorkerID) (WorkerType WorkerType, id int, workStatus bool) {
+	args := AskReq{workerID}
+	reply := AskResp{}
+
+	workStatus = call("Coordinator.Ask", &args, &reply)
+	if workStatus {
+		log.Printf("client receive: %v\n", reply)
+	} else {
+		log.Printf("call failed!\n")
+	}
+	return reply.Type, reply.Id, workStatus
 }
 
 //
