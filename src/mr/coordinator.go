@@ -81,7 +81,6 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 	return nil
 }
 func (c *Coordinator) Commit(args *CommitReq, reply *CommitResp) error {
-	//TODO:通知 reduce 任务
 	log.Printf("ID: %v %v-worker: %v  commit\n", args.Id, args.Type.String(), args.GID)
 	c.wMap.Lock()
 	defer c.wMap.Unlock()
@@ -96,7 +95,7 @@ func (c *Coordinator) Commit(args *CommitReq, reply *CommitResp) error {
 		}
 		if c.mapW.complete == c.mapW.sum {
 			log.Println("map已经做完")
-			//TODO:通知所有的reduce
+			//通知所有的reduce
 			go func() {
 				var resp Empty
 				var cnt int
@@ -117,9 +116,11 @@ func (c *Coordinator) Commit(args *CommitReq, reply *CommitResp) error {
 			}()
 		}
 	} else if args.Type == ReduceW {
+		c.cond.L.Lock()
 		c.reduceW.complete++
 		if c.reduceW.complete == c.getReduceCount() {
 			log.Println("reduce已经做完")
+			c.cond.L.Unlock()
 			//工作已经全部做完，唤醒主线程
 			c.cond.Signal()
 		}
@@ -218,6 +219,7 @@ func (c *Coordinator) server() {
 func (c *Coordinator) Done() bool {
 	ret := false
 	c.cond.L.Lock()
+	defer c.cond.L.Unlock()
 	for c.reduceW.complete != c.getReduceCount() {
 		c.cond.Wait()
 	}
