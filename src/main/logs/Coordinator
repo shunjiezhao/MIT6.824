@@ -1,0 +1,68 @@
+21:46:01 /home/zsj/mit/6.824/src/mr/coordinator.go:169: worker:1 请求任务
+21:46:01 /home/zsj/mit/6.824/src/mr/coordinator.go:176: 分配Map-0任务给工人
+21:46:02 /home/zsj/mit/6.824/src/mr/coordinator.go:87: ID: 1 Map-worker: 0  commit
+21:46:02 /home/zsj/mit/6.824/src/mr/coordinator.go:91: map:0已经做完
+21:46:02 /home/zsj/mit/6.824/src/mr/coordinator.go:101: map已经做完
+21:46:02 /home/zsj/mit/6.824/src/mr/coordinator.go:105: map commit 完成
+21:46:02 /home/zsj/mit/6.824/src/mr/coordinator.go:169: worker:1 请求任务
+21:46:02 /home/zsj/mit/6.824/src/mr/coordinator.go:176: 分配Reduce-0任务给工人
+21:46:03 /home/zsj/mit/6.824/src/mr/worker.go:183: 
+发送文件数量为1
+21:46:03 /home/zsj/mit/6.824/src/mr/coordinator.go:87: ID: 1 Reduce-worker: 0  commit
+21:46:03 /home/zsj/mit/6.824/src/mr/coordinator.go:110: reduce:0已经做完
+21:46:03 /home/zsj/mit/6.824/src/mr/coordinator.go:169: worker:1 请求任务
+21:46:03 /home/zsj/mit/6.824/src/mr/coordinator.go:176: 分配Reduce-1任务给工人
+21:46:04 /home/zsj/mit/6.824/src/mr/worker.go:183: 
+发送文件数量为1
+21:46:04 /home/zsj/mit/6.824/src/mr/coordinator.go:87: ID: 1 Reduce-worker: 1  commit
+21:46:04 /home/zsj/mit/6.824/src/mr/coordinator.go:110: reduce:1已经做完
+21:46:04 /home/zsj/mit/6.824/src/mr/coordinator.go:169: worker:1 请求任务
+21:46:04 /home/zsj/mit/6.824/src/mr/coordinator.go:176: 分配Reduce-2任务给工人
+21:46:05 /home/zsj/mit/6.824/src/mr/worker.go:183: 
+发送文件数量为1
+21:46:05 /home/zsj/mit/6.824/src/mr/coordinator.go:87: ID: 1 Reduce-worker: 2  commit
+21:46:05 /home/zsj/mit/6.824/src/mr/coordinator.go:110: reduce:2已经做完
+21:46:05 /home/zsj/mit/6.824/src/mr/coordinator.go:169: worker:1 请求任务
+21:46:05 /home/zsj/mit/6.824/src/mr/coordinator.go:176: 分配Reduce-3任务给工人
+21:46:06 /home/zsj/mit/6.824/src/mr/worker.go:183: 
+发送文件数量为1
+21:46:06 /home/zsj/mit/6.824/src/mr/coordinator.go:87: ID: 1 Reduce-worker: 3  commit
+21:46:06 /home/zsj/mit/6.824/src/mr/coordinator.go:110: reduce:3已经做完
+21:46:06 /home/zsj/mit/6.824/src/mr/coordinator.go:169: worker:1 请求任务
+21:46:06 /home/zsj/mit/6.824/src/mr/coordinator.go:176: 分配Reduce-4任务给工人
+21:46:07 /home/zsj/mit/6.824/src/mr/worker.go:183: 
+发送文件数量为1
+21:46:07 /home/zsj/mit/6.824/src/mr/coordinator.go:87: ID: 1 Reduce-worker: 4  commit
+21:46:07 /home/zsj/mit/6.824/src/mr/coordinator.go:110: reduce:4已经做完
+21:46:07 /home/zsj/mit/6.824/src/mr/coordinator.go:169: worker:1 请求任务
+21:46:07 /home/zsj/mit/6.824/src/mr/coordinator.go:176: 分配Reduce-5任务给工人
+21:46:08 /home/zsj/mit/6.824/src/mr/worker.go:183: 
+发送文件数量为1
+21:46:08 /home/zsj/mit/6.824/src/mr/coordinator.go:87: ID: 1 Reduce-worker: 5  commit
+21:46:08 /home/zsj/mit/6.824/src/mr/coordinator.go:110: reduce:5已经做完
+21:46:08 /home/zsj/mit/6.824/src/mr/coordinator.go:169: worker:1 请求任务
+21:46:08 /home/zsj/mit/6.824/src/mr/coordinator.go:176: 分配Reduce-6任务给工人
+21:46:09 /home/zsj/mit/6.824/src/mr/worker.go:183: 
+发送文件数量为1
+21:46:09 /home/zsj/mit/6.824/src/mr/coordinator.go:87: ID: 1 Reduce-worker: 6  commit
+21:46:09 /home/zsj/mit/6.824/src/mr/coordinator.go:110: reduce:6已经做完
+21:46:09 /home/zsj/mit/6.824/src/mr/coordinator.go:169: worker:1 请求任务
+21:46:09 /home/zsj/mit/6.824/src/mr/coordinator.go:176: 分配Reduce-7任务给工人
+21:46:10 /home/zsj/mit/6.824/src/mr/worker.go:183: 
+发送文件数量为1
+21:46:10 /home/zsj/mit/6.824/src/mr/coordinator.go:87: ID: 1 Reduce-worker: 7  commit
+21:46:10 /home/zsj/mit/6.824/src/mr/coordinator.go:110: reduce:7已经做完
+21:46:10 /home/zsj/mit/6.824/src/mr/coordinator.go:169: worker:1 请求任务
+21:46:10 /home/zsj/mit/6.824/src/mr/coordinator.go:176: 分配Reduce-8任务给工人
+21:46:11 /home/zsj/mit/6.824/src/mr/worker.go:183: 
+发送文件数量为1
+21:46:11 /home/zsj/mit/6.824/src/mr/coordinator.go:87: ID: 1 Reduce-worker: 8  commit
+21:46:11 /home/zsj/mit/6.824/src/mr/coordinator.go:110: reduce:8已经做完
+21:46:11 /home/zsj/mit/6.824/src/mr/coordinator.go:169: worker:1 请求任务
+21:46:11 /home/zsj/mit/6.824/src/mr/coordinator.go:176: 分配Reduce-9任务给工人
+21:46:12 /home/zsj/mit/6.824/src/mr/worker.go:183: 
+发送文件数量为1
+21:46:12 /home/zsj/mit/6.824/src/mr/coordinator.go:87: ID: 1 Reduce-worker: 9  commit
+21:46:12 /home/zsj/mit/6.824/src/mr/coordinator.go:110: reduce:9已经做完
+21:46:12 /home/zsj/mit/6.824/src/mr/coordinator.go:113: reduce已经做完
+21:46:12 /home/zsj/mit/6.824/src/mr/coordinator.go:266: done

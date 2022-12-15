@@ -1,0 +1,38 @@
+/home/zsj/mit/6.824/src/mr/rpc.go:52: 工人：4 正在监听♥检测
+/usr/local/go/src/net/rpc/server.go:308: rpc.Register: reply type of method "Ping" is not a pointer: "mr.PingResp"
+/usr/local/go/src/net/rpc/server.go:267: rpc.Register: type WorkerID has no exported methods of suitable type
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: {Reduce 1   /home/zsj/mit/6.824/src/main/mr-tmp/mr-out-1 1 10}
+/home/zsj/mit/6.824/src/mr/worker.go:71: worker:4 start Reduce:1 work 
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:146: wait 进度：0/1
+/home/zsj/mit/6.824/src/mr/rpc.go:192: Reduce工人1： 正在监听🚀
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:119: 调用了 receive
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:133: 收到长度为:  1
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:150: signal
+/home/zsj/mit/6.824/src/mr/worker.go:94: Commit
+/home/zsj/mit/6.824/src/mr/worker.go:96: Commit 完成
+/home/zsj/mit/6.824/src/mr/worker.go:98: Reduce-worker: 4 commit success
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:116: reduce: 1 工作结束
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: {Reduce 6   /home/zsj/mit/6.824/src/main/mr-tmp/mr-out-6 1 10}
+/home/zsj/mit/6.824/src/mr/worker.go:71: worker:4 start Reduce:6 work 
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:146: wait 进度：0/1
+/home/zsj/mit/6.824/src/mr/rpc.go:192: Reduce工人6： 正在监听🚀
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:119: 调用了 receive
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:133: 收到长度为:  1
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:150: signal
+/home/zsj/mit/6.824/src/mr/worker.go:94: Commit
+/home/zsj/mit/6.824/src/mr/worker.go:96: Commit 完成
+/home/zsj/mit/6.824/src/mr/worker.go:98: Reduce-worker: 4 commit success
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:116: reduce: 6 工作结束
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: {Reduce 7   /home/zsj/mit/6.824/src/main/mr-tmp/mr-out-7 1 10}
+/home/zsj/mit/6.824/src/mr/worker.go:71: worker:4 start Reduce:7 work 
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:146: wait 进度：0/1
+/home/zsj/mit/6.824/src/mr/rpc.go:192: Reduce工人7： 正在监听🚀
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:119: 调用了 receive
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:133: 收到长度为:  1
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:150: signal
+/home/zsj/mit/6.824/src/mr/worker.go:94: Commit
+/home/zsj/mit/6.824/src/mr/worker.go:96: Commit 完成
+/home/zsj/mit/6.824/src/mr/worker.go:98: Reduce-worker: 4 commit success
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:116: reduce: 7 工作结束
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: { 0    0 0}
+/home/zsj/mit/6.824/src/mr/worker.go:169: dialing:dial-http unix /var/tmp/824-mr-1000: read unix @->/var/tmp/824-mr-1000: read: connection reset by peer

@@ -1,0 +1,133 @@
+/usr/local/go/src/net/rpc/server.go:308: rpc.Register: reply type of method "Ping" is not a pointer: "mr.PingResp"
+/usr/local/go/src/net/rpc/server.go:267: rpc.Register: type WorkerID has no exported methods of suitable type
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: {Map 0 /home/zsj/mit/6.824/src/main/mr-input/mr-in-0 /home/zsj/mit/6.824/src/main/mr-output/mr-tmp-0  1 10}
+/home/zsj/mit/6.824/src/mr/worker.go:71: worker:1 start Map:0 work 
+/home/zsj/mit/6.824/src/mr/mapWorker.go:35: Map工人得到输入文件: /home/zsj/mit/6.824/src/main/mr-input/mr-in-0
+/home/zsj/mit/6.824/src/mr/rpc.go:192: Map工人0： 正在监听🚀
+/usr/local/go/src/net/rpc/server.go:267: rpc.Register: type MapWorker-0 has no exported methods of suitable type
+/home/zsj/mit/6.824/src/mr/mapWorker.go:53: Map-worker-0: create tmp file: /home/zsj/mit/6.824/src/main/mr-output/mr-tmp-0-0
+/home/zsj/mit/6.824/src/mr/mapWorker.go:53: Map-worker-0: create tmp file: /home/zsj/mit/6.824/src/main/mr-output/mr-tmp-0-1
+/home/zsj/mit/6.824/src/mr/mapWorker.go:53: Map-worker-0: create tmp file: /home/zsj/mit/6.824/src/main/mr-output/mr-tmp-0-2
+/home/zsj/mit/6.824/src/mr/mapWorker.go:53: Map-worker-0: create tmp file: /home/zsj/mit/6.824/src/main/mr-output/mr-tmp-0-3
+/home/zsj/mit/6.824/src/mr/mapWorker.go:53: Map-worker-0: create tmp file: /home/zsj/mit/6.824/src/main/mr-output/mr-tmp-0-4
+/home/zsj/mit/6.824/src/mr/mapWorker.go:53: Map-worker-0: create tmp file: /home/zsj/mit/6.824/src/main/mr-output/mr-tmp-0-5
+/home/zsj/mit/6.824/src/mr/mapWorker.go:53: Map-worker-0: create tmp file: /home/zsj/mit/6.824/src/main/mr-output/mr-tmp-0-6
+/home/zsj/mit/6.824/src/mr/mapWorker.go:53: Map-worker-0: create tmp file: /home/zsj/mit/6.824/src/main/mr-output/mr-tmp-0-7
+/home/zsj/mit/6.824/src/mr/mapWorker.go:53: Map-worker-0: create tmp file: /home/zsj/mit/6.824/src/main/mr-output/mr-tmp-0-8
+/home/zsj/mit/6.824/src/mr/mapWorker.go:53: Map-worker-0: create tmp file: /home/zsj/mit/6.824/src/main/mr-output/mr-tmp-0-9
+/home/zsj/mit/6.824/src/mr/worker.go:94: Commit
+/home/zsj/mit/6.824/src/mr/worker.go:96: Commit 完成
+/home/zsj/mit/6.824/src/mr/worker.go:98: Map-worker: 1 commit success
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: {Reduce 0   /home/zsj/mit/6.824/src/main/mr-tmp/mr-out-0 1 10}
+/home/zsj/mit/6.824/src/mr/worker.go:71: worker:1 start Reduce:0 work 
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:146: wait 进度：0/1
+/home/zsj/mit/6.824/src/mr/rpc.go:192: Reduce工人0： 正在监听🚀
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:119: 调用了 receive
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:133: 收到长度为:  1
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:150: signal
+/home/zsj/mit/6.824/src/mr/worker.go:94: Commit
+/home/zsj/mit/6.824/src/mr/worker.go:96: Commit 完成
+/home/zsj/mit/6.824/src/mr/worker.go:98: Reduce-worker: 1 commit success
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:116: reduce: 0 工作结束
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: {Reduce 1   /home/zsj/mit/6.824/src/main/mr-tmp/mr-out-1 1 10}
+/home/zsj/mit/6.824/src/mr/worker.go:71: worker:1 start Reduce:1 work 
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:146: wait 进度：0/1
+/home/zsj/mit/6.824/src/mr/rpc.go:192: Reduce工人1： 正在监听🚀
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:119: 调用了 receive
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:133: 收到长度为:  1
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:150: signal
+/home/zsj/mit/6.824/src/mr/worker.go:94: Commit
+/home/zsj/mit/6.824/src/mr/worker.go:96: Commit 完成
+/home/zsj/mit/6.824/src/mr/worker.go:98: Reduce-worker: 1 commit success
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:116: reduce: 1 工作结束
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: {Reduce 2   /home/zsj/mit/6.824/src/main/mr-tmp/mr-out-2 1 10}
+/home/zsj/mit/6.824/src/mr/worker.go:71: worker:1 start Reduce:2 work 
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:146: wait 进度：0/1
+/home/zsj/mit/6.824/src/mr/rpc.go:192: Reduce工人2： 正在监听🚀
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:119: 调用了 receive
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:133: 收到长度为:  1
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:150: signal
+/home/zsj/mit/6.824/src/mr/worker.go:94: Commit
+/home/zsj/mit/6.824/src/mr/worker.go:96: Commit 完成
+/home/zsj/mit/6.824/src/mr/worker.go:98: Reduce-worker: 1 commit success
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:116: reduce: 2 工作结束
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: {Reduce 3   /home/zsj/mit/6.824/src/main/mr-tmp/mr-out-3 1 10}
+/home/zsj/mit/6.824/src/mr/worker.go:71: worker:1 start Reduce:3 work 
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:146: wait 进度：0/1
+/home/zsj/mit/6.824/src/mr/rpc.go:192: Reduce工人3： 正在监听🚀
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:119: 调用了 receive
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:133: 收到长度为:  1
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:150: signal
+/home/zsj/mit/6.824/src/mr/worker.go:94: Commit
+/home/zsj/mit/6.824/src/mr/worker.go:96: Commit 完成
+/home/zsj/mit/6.824/src/mr/worker.go:98: Reduce-worker: 1 commit success
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:116: reduce: 3 工作结束
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: {Reduce 4   /home/zsj/mit/6.824/src/main/mr-tmp/mr-out-4 1 10}
+/home/zsj/mit/6.824/src/mr/worker.go:71: worker:1 start Reduce:4 work 
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:146: wait 进度：0/1
+/home/zsj/mit/6.824/src/mr/rpc.go:192: Reduce工人4： 正在监听🚀
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:119: 调用了 receive
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:133: 收到长度为:  1
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:150: signal
+/home/zsj/mit/6.824/src/mr/worker.go:94: Commit
+/home/zsj/mit/6.824/src/mr/worker.go:96: Commit 完成
+/home/zsj/mit/6.824/src/mr/worker.go:98: Reduce-worker: 1 commit success
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:116: reduce: 4 工作结束
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: {Reduce 5   /home/zsj/mit/6.824/src/main/mr-tmp/mr-out-5 1 10}
+/home/zsj/mit/6.824/src/mr/worker.go:71: worker:1 start Reduce:5 work 
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:146: wait 进度：0/1
+/home/zsj/mit/6.824/src/mr/rpc.go:192: Reduce工人5： 正在监听🚀
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:119: 调用了 receive
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:133: 收到长度为:  1
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:150: signal
+/home/zsj/mit/6.824/src/mr/worker.go:94: Commit
+/home/zsj/mit/6.824/src/mr/worker.go:96: Commit 完成
+/home/zsj/mit/6.824/src/mr/worker.go:98: Reduce-worker: 1 commit success
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:116: reduce: 5 工作结束
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: {Reduce 6   /home/zsj/mit/6.824/src/main/mr-tmp/mr-out-6 1 10}
+/home/zsj/mit/6.824/src/mr/worker.go:71: worker:1 start Reduce:6 work 
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:146: wait 进度：0/1
+/home/zsj/mit/6.824/src/mr/rpc.go:192: Reduce工人6： 正在监听🚀
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:119: 调用了 receive
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:133: 收到长度为:  1
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:150: signal
+/home/zsj/mit/6.824/src/mr/worker.go:94: Commit
+/home/zsj/mit/6.824/src/mr/worker.go:96: Commit 完成
+/home/zsj/mit/6.824/src/mr/worker.go:98: Reduce-worker: 1 commit success
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:116: reduce: 6 工作结束
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: {Reduce 7   /home/zsj/mit/6.824/src/main/mr-tmp/mr-out-7 1 10}
+/home/zsj/mit/6.824/src/mr/worker.go:71: worker:1 start Reduce:7 work 
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:146: wait 进度：0/1
+/home/zsj/mit/6.824/src/mr/rpc.go:192: Reduce工人7： 正在监听🚀
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:119: 调用了 receive
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:133: 收到长度为:  1
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:150: signal
+/home/zsj/mit/6.824/src/mr/worker.go:94: Commit
+/home/zsj/mit/6.824/src/mr/worker.go:96: Commit 完成
+/home/zsj/mit/6.824/src/mr/worker.go:98: Reduce-worker: 1 commit success
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:116: reduce: 7 工作结束
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: {Reduce 8   /home/zsj/mit/6.824/src/main/mr-tmp/mr-out-8 1 10}
+/home/zsj/mit/6.824/src/mr/worker.go:71: worker:1 start Reduce:8 work 
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:146: wait 进度：0/1
+/home/zsj/mit/6.824/src/mr/rpc.go:192: Reduce工人8： 正在监听🚀
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:119: 调用了 receive
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:133: 收到长度为:  1
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:150: signal
+/home/zsj/mit/6.824/src/mr/worker.go:94: Commit
+/home/zsj/mit/6.824/src/mr/worker.go:96: Commit 完成
+/home/zsj/mit/6.824/src/mr/worker.go:98: Reduce-worker: 1 commit success
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:116: reduce: 8 工作结束
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: {Reduce 9   /home/zsj/mit/6.824/src/main/mr-tmp/mr-out-9 1 10}
+/home/zsj/mit/6.824/src/mr/worker.go:71: worker:1 start Reduce:9 work 
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:146: wait 进度：0/1
+/home/zsj/mit/6.824/src/mr/rpc.go:192: Reduce工人9： 正在监听🚀
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:119: 调用了 receive
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:133: 收到长度为:  1
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:150: signal
+/home/zsj/mit/6.824/src/mr/worker.go:94: Commit
+/home/zsj/mit/6.824/src/mr/worker.go:96: Commit 完成
+/home/zsj/mit/6.824/src/mr/worker.go:98: Reduce-worker: 1 commit success
+/home/zsj/mit/6.824/src/mr/reduceWorker.go:116: reduce: 9 工作结束
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: { 0    0 0}
+/home/zsj/mit/6.824/src/mr/worker.go:123: client receive: { 0    0 0}
+/home/zsj/mit/6.824/src/mr/worker.go:169: dialing:dial unix /var/tmp/824-mr-1000: connect: connection refused
