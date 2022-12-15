@@ -1,12 +1,10 @@
 package mr
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net"
-	"net/http"
-	"net/rpc"
 	"os"
 	"sort"
 	"strings"
@@ -19,26 +17,16 @@ type ReduceWorker struct {
 	mCnt       int // map 的数量
 	outPutFile string
 	gID        GroupID
+	isRecieve  uint32
 	lock       sync.RWMutex
 }
 
-func reduceWKReceive(id GroupID) string {
-	return fmt.Sprintf("ReduceWorker-%v.Receive", id)
+func reduceWKReceive(gID GroupID) string {
+	return workerRpcName(ReduceW, gID) + ".Receive"
 }
 
-func (r *ReduceWorker) server() {
-	log.Printf("reduce工人：%v 正在监听🚀", r.gID)
-	name := fmt.Sprintf("ReduceWorker-%v", r.gID)
-	rpc.RegisterName(name, r)
-	server := rpc.NewServer()
-	server.HandleHTTP("/"+name, "/"+name+"/debug/rpc")
-	sockname := reduceWorkerSock(r.gID)
-	os.Remove(sockname)
-	l, e := net.Listen("unix", sockname)
-	if e != nil {
-		log.Fatal("listen error:", e)
-	}
-	go http.Serve(l, nil)
+func (r *ReduceWorker) server(ctx context.Context) {
+	server(ctx, r.gID, ReduceW, r)
 }
 
 func newReduceWorker(resp *AskResp) *ReduceWorker {
@@ -55,9 +43,10 @@ type ByKey []KeyValue
 func (a ByKey) Len() int           { return len(a) }
 func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
-func (r *ReduceWorker) work(id WorkerID, reducef func(string, []string) string, reply AskResp) {
-	go r.server()
-
+func (r *ReduceWorker) work(id WorkerID, reducef func(string, []string) string, reply AskResp, ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	go r.server(ctx)
+	defer cancel()
 	//当出来时就是已经将所有的文件接受
 	r.receiveTmpFile()
 	// 开始做事情
@@ -124,17 +113,24 @@ func (r *ReduceWorker) work(id WorkerID, reducef func(string, []string) string, 
 	}
 	Commit(id, reply.Id, reply.Type, nil)
 	ofile.Close()
+	log.Printf("reduce: %v 工作结束", r.gID)
 }
 func (r *ReduceWorker) Receive(args *ReduceRevReq, resp *Empty) error {
 	log.Printf("调用了 receive")
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	if len(r.files) == r.mCnt {
+		r.cond.Signal()
+		log.Printf("已经收取够文件了，不用再传\n")
+		return nil
+	}
 	if len(args.Files) == 0 {
 		return fmt.Errorf("文件名为空")
 	}
-	r.lock.Lock()
 	r.files = make([]string, len(args.Files))
 	// make a copy of buf_Seq in an entirely separate slice
 	copy(r.files, args.Files)
-	r.lock.Unlock()
+	log.Println("收到长度为: ", len(r.files))
 	if len(r.files) != r.mCnt {
 		log.Fatalf("reduce接受的文件数量不够; want:%v; but:%v", r.mCnt, len(r.files))
 	}
@@ -147,7 +143,7 @@ func (r *ReduceWorker) receiveTmpFile() {
 
 	for r.lock.RLock(); len(r.files) != r.mCnt; r.lock.RLock() {
 		r.lock.RUnlock()
-		log.Printf("wait")
+		log.Printf("wait 进度：%v/%v", len(r.files), r.mCnt)
 		r.cond.Wait()
 	}
 	r.lock.RUnlock()

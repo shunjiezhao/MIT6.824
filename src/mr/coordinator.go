@@ -6,6 +6,7 @@ import (
 	"log"
 	"path"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 import "net"
@@ -21,13 +22,15 @@ type Coordinator struct {
 	mapW    completeStatus
 	reduceW completeStatus
 
-	wMap       sync.RWMutex
+	mapLock    sync.RWMutex
 	workers    map[WorkerID]workerStatus // 维护状态 然后需要 记录活跃的工人
 	tmpFiles   [][]string
 	tmpPath    string
 	inputPath  string
 	outputPath string
 	done       bool
+	mapDone    uint32
+	mapCond    *sync.Cond
 	cond       *sync.Cond
 }
 
@@ -82,9 +85,10 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 }
 func (c *Coordinator) Commit(args *CommitReq, reply *CommitResp) error {
 	log.Printf("ID: %v %v-worker: %v  commit\n", args.Id, args.Type.String(), args.GID)
-	c.wMap.Lock()
-	defer c.wMap.Unlock()
+	c.mapLock.Lock()
+	defer c.mapLock.Unlock()
 	if args.Type == MapW {
+		log.Printf("map:%v已经做完", args.GID)
 		c.mapW.complete++
 		if len(args.Files) != c.reduceW.sum {
 			log.Println("want: %v ; but: %v\n", c.reduceW.sum, len(args.Files))
@@ -95,34 +99,21 @@ func (c *Coordinator) Commit(args *CommitReq, reply *CommitResp) error {
 		}
 		if c.mapW.complete == c.mapW.sum {
 			log.Println("map已经做完")
-			//通知所有的reduce
-			go func() {
-				var resp Empty
-				var cnt int
-				for id, status := range c.workers {
-					if status.Type == ReduceW {
-						assert(int(status.gID) < c.getReduceCount(), "组内id大于reduce工人的数量")
-						req := ReduceRevReq{Files: c.tmpFiles[status.gID]}
-						fmt.Println("GID:", status.gID)
-						assert(c.getMapCount() == len(c.tmpFiles[status.gID]),
-							fmt.Sprintf("向 reduce发送 %v 个worker 传递信号的; 但是发送了 %v", c.getMapCount(),
-								len(c.tmpFiles[status.gID])))
-						callWorker(id, reduceWKReceive(status.gID), &req, &resp)
-						cnt++
-					}
-				}
-				assert(cnt == c.getReduceCount(), fmt.Sprintf("应该向 %v 个worker 传递信号的 但是向 %v 个传递信号", c.getReduceCount(),
-					cnt))
-			}()
+			// 设置标志位
+			atomic.AddUint32(&c.mapDone, 1)
+			c.mapCond.Signal()
+			log.Printf("map commit 完成")
 		}
 	} else if args.Type == ReduceW {
 		c.cond.L.Lock()
+		defer c.cond.L.Unlock()
+		log.Printf("reduce:%v已经做完", args.GID)
 		c.reduceW.complete++
 		if c.reduceW.complete == c.getReduceCount() {
 			log.Println("reduce已经做完")
-			c.cond.L.Unlock()
 			//工作已经全部做完，唤醒主线程
 			c.cond.Signal()
+			c.done = true
 		}
 	}
 	return nil
@@ -134,6 +125,46 @@ func assert(check bool, content string) {
 	}
 
 }
+
+// 所有的map都已经做完了，我们只需要去告诉 reduce
+func (c *Coordinator) NotifyReduce() error {
+	c.mapCond.L.Lock()
+	defer c.mapCond.L.Unlock()
+	for atomic.LoadUint32(&c.mapDone) != 1 {
+		c.mapCond.Wait() // 等待
+	}
+
+	for {
+		var resp Empty
+		var cnt int
+
+		c.mapLock.RLock()
+		for id, status := range c.workers {
+			if status.Type == ReduceW {
+				assert(status.status == Working, "状态设置不对")
+				assert(int(status.gID) < c.getReduceCount(), "组内id大于reduce工人的数量")
+				req := ReduceRevReq{Files: c.tmpFiles[status.gID]}
+				fmt.Println("GID:", status.gID)
+				assert(c.getMapCount() == len(c.tmpFiles[status.gID]),
+					fmt.Sprintf("向 reduce发送 %v 个worker 传递信号的; 但是发送了 %v", c.getMapCount(),
+						len(c.tmpFiles[status.gID])))
+				callWorker(id, reduceWKReceive(status.gID), &req, &resp)
+				cnt++
+			}
+		}
+		//assert(cnt == c.getReduceCount(), fmt.Sprintf("应该向 %v 个worker 传递信号的 但是向 %v 个传递信号", c.getReduceCount(),
+		//	cnt))
+		if c.done == true {
+			c.mapLock.RUnlock()
+			break
+		}
+
+		c.mapLock.RUnlock()
+		time.Sleep(time.Second)
+	}
+	return nil
+}
+
 func (c *Coordinator) Ask(args *AskReq, reply *AskResp) error {
 	log.Printf("worker:%v 请求任务\n", args.Id)
 	// 检查是否有任务可以分配
@@ -162,8 +193,8 @@ func (c *Coordinator) Ask(args *AskReq, reply *AskResp) error {
 func (c *Coordinator) Register(args *RegReq, reply *RegResp) error {
 	//TODO:注册需要传递参数嘛
 	//log.Printf("receive %v")
-	c.wMap.Lock()
-	defer c.wMap.Unlock()
+	c.mapLock.Lock()
+	defer c.mapLock.Unlock()
 	c.workerID++
 	reply.Id = c.workerID
 	c.workers[reply.Id] = workerStatus{status: WorkerFree, Type: 0, gID: 0}
@@ -174,7 +205,7 @@ func (c *Coordinator) Pong() error {
 	for {
 		select {
 		case <-ticker.C:
-			c.wMap.Lock()
+			c.mapLock.Lock()
 			var ping = PingReq{Content: "Ping"}
 			for id, status := range c.workers {
 				var pong PingResp
@@ -190,7 +221,7 @@ func (c *Coordinator) Pong() error {
 
 				}
 			}
-			c.wMap.Unlock()
+			c.mapLock.Unlock()
 		}
 	}
 	return nil
@@ -225,14 +256,15 @@ func (c *Coordinator) Done() bool {
 	}
 	// Your code here.
 	log.Println("done")
+	// 将所有的reduce放在一个文件里面
 	ret = true
 	return ret
 }
 
 // 分配任务
 func (c *Coordinator) CheckCanAlloc(wid WorkerID) workerStatus {
-	c.wMap.Lock()
-	defer c.wMap.Unlock()
+	c.mapLock.Lock()
+	defer c.mapLock.Unlock()
 	if c.workers[wid].status == Dead {
 		log.Println("dead?")
 	}
@@ -285,6 +317,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	// 删除可能存在的文件
 	c.removeExistInputFile()
 	c.writeInputFile(files)
+	go c.NotifyReduce()
 
 	c.server()
 	return c
@@ -343,7 +376,6 @@ func (c *Coordinator) chooseMinOne(ids []bool) GroupID {
 }
 
 func New(nReduce int) *Coordinator {
-	nReduce = 3
 	mapSum := 1
 	return &Coordinator{
 		ticker:     time.Second,
@@ -361,5 +393,6 @@ func New(nReduce int) *Coordinator {
 		tmpFiles: make([][]string, nReduce),
 		workers:  map[WorkerID]workerStatus{},
 		cond:     &sync.Cond{L: &sync.Mutex{}},
+		mapCond:  &sync.Cond{L: &sync.Mutex{}},
 	}
 }

@@ -7,6 +7,7 @@ package mr
 //
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -24,6 +25,15 @@ type WorkerID int64
 
 type WorkerType uint8
 
+func (w WorkerType) SockName() func(id GroupID) string {
+	switch w {
+	case MapW:
+		return mapWorkerSock
+	case ReduceW:
+		return reduceWorkerSock
+	}
+	panic("")
+}
 func (w WorkerType) String() string {
 	switch w {
 	case MapW:
@@ -38,7 +48,7 @@ func (w WorkerType) String() string {
 func (w WorkerType) CanWork() bool {
 	return w != WorkTNODefine
 }
-func (id WorkerID) server() {
+func (id WorkerID) server(ctx context.Context) {
 	log.Printf("工人：%v 正在监听♥检测", id)
 
 	rpc.Register(&id)
@@ -50,6 +60,7 @@ func (id WorkerID) server() {
 		log.Fatal("listen error:", e)
 	}
 	go http.Serve(l, nil)
+	closeServe(ctx, l)
 }
 
 func (id WorkerID) Ping(req *PingReq, resp PingResp) error {
@@ -165,4 +176,32 @@ func reduceWorkerSock(id GroupID) string {
 	s := "/var/tmp/824-mr-reduce-"
 	s += strconv.Itoa(int(id))
 	return s
+}
+func closeServe(ctx context.Context, l net.Listener) {
+	select {
+	case <-ctx.Done():
+		l.Close()
+	}
+}
+
+func workerRpcName(Type WorkerType, gID GroupID) string {
+	return fmt.Sprintf("%vWorker-%v", Type.String(), gID)
+
+}
+func server(ctx context.Context, gID GroupID, Type WorkerType, rcvr interface{}) {
+	log.Printf("%v工人%v： 正在监听🚀", Type.String(), gID)
+	name := workerRpcName(Type, gID)
+
+	rpc.RegisterName(name, rcvr)
+	server := rpc.NewServer()
+	server.HandleHTTP("/"+name, "/"+name+"/debug/rpc")
+
+	sockname := Type.SockName()(gID)
+	os.Remove(sockname)
+	l, e := net.Listen("unix", sockname)
+	if e != nil {
+		log.Fatal("listen error:", e)
+	}
+	go http.Serve(l, nil)
+	closeServe(ctx, l)
 }

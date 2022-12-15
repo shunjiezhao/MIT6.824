@@ -1,12 +1,10 @@
 package mr
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net"
-	"net/http"
-	"net/rpc"
 	"os"
 )
 
@@ -27,8 +25,10 @@ func newMapWorker(resp *AskResp) *MapWorker {
 		gID:       resp.Id,
 	}
 }
-func (m *MapWorker) work(id WorkerID, mapf func(string, string) []KeyValue, reply AskResp) {
-	go m.server()
+func (m *MapWorker) work(id WorkerID, mapf func(string, string) []KeyValue, reply AskResp, ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	go m.server(ctx)
+	defer cancel()
 	if reply.InputFileName == "" {
 		panic("没有得到输入文件名")
 	}
@@ -82,16 +82,6 @@ func (m *MapWorker) work(id WorkerID, mapf func(string, string) []KeyValue, repl
 // reduce 读取文件
 func (m *MapWorker) reciveFile() {
 }
-func (m *MapWorker) server() {
-	return
-	log.Printf("map工人%v： 正在监听🚀", m.gID)
-	rpc.Register(m)
-	rpc.HandleHTTP()
-	sockname := mapWorkerSock(m.gID)
-	os.Remove(sockname)
-	l, e := net.Listen("unix", sockname)
-	if e != nil {
-		log.Fatal("listen error:", e)
-	}
-	go http.Serve(l, nil)
+func (m *MapWorker) server(ctx context.Context) {
+	server(ctx, m.gID, MapW, m)
 }

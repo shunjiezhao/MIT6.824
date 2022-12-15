@@ -1,6 +1,7 @@
 package mr
 
 import (
+	"context"
 	"fmt"
 	"time"
 )
@@ -33,10 +34,13 @@ func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 	log.SetFlags(log.Llongfile)
 	// Your worker implementation here.
+	ctx := context.Background()
 	// 1. 注册
 	workerID := Register()
-	go workerID.server()
+	go workerID.server(ctx)
 
+work:
+	fmt.Println(workerID, "开始获取任务")
 	var reply AskResp
 	// id 是map 或者 reduce 的第几号任务
 	var masterS bool
@@ -59,11 +63,13 @@ func Worker(mapf func(string, string) []KeyValue,
 
 	if reply.Type == MapW {
 		worker := newMapWorker(&reply)
-		worker.work(workerID, mapf, reply)
+		worker.work(workerID, mapf, reply, ctx)
 	} else if reply.Type == ReduceW {
 		worker := newReduceWorker(&reply)
-		worker.work(workerID, reducef, reply)
+		worker.work(workerID, reducef, reply, ctx)
 	}
+	// 继续获取任务
+	goto work
 }
 
 func Commit(id WorkerID, gid GroupID, Type WorkerType, files []string) error {
@@ -74,7 +80,9 @@ func Commit(id WorkerID, gid GroupID, Type WorkerType, files []string) error {
 		Files: files,
 	}
 	reply := CommitResp{}
+	log.Println("Commit")
 	ok := call("Coordinator.Commit", &args, &reply)
+	log.Println("Commit 完成")
 	if ok {
 		log.Printf("%v-worker: %v commit success\n", Type.String(), id)
 	} else {
