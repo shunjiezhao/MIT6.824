@@ -18,8 +18,10 @@ package raft
 //
 
 import (
+	"fmt"
 	//	"bytes"
 	"math/rand"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -67,18 +69,16 @@ type Raft struct {
 	//latest term server has seen (initialized to 0  on first boot, increases monotonically)
 	currentTerm int
 	// votedFor candidateId that received vote in current term (or null if none)
-	votedFor  int
-	state     state
-	cond      *sync.Cond
-	lastHeart time.Time
+	votedFor     int
+	state        state
+	electionTime time.Time
 }
 type state uint8
 
 const (
-	heartBeatTime = time.Millisecond * 5
-	heartTimeOut  = time.Second
-
-	Follower = iota
+	heartTime    = time.Microsecond * 150
+	heartTimeOut = time.Second
+	Follower     = iota
 	Candidate
 	Leader
 )
@@ -184,10 +184,12 @@ type RequestVoteReply struct {
 
 // 必须持有锁
 func (rf *Raft) updateTermIfCurTermLow(term int) {
-	if term > rf.currentTerm {
-		rf.currentTerm = term
-		rf.state = Follower
+	if term < rf.currentTerm {
+		panic(fmt.Sprintf("%v %v", term, rf.currentTerm))
 	}
+
+	rf.state = Follower
+	rf.currentTerm = term
 }
 
 // example RequestVote RPC handler.
@@ -205,32 +207,25 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if curTerm > args.Term { // 过时
 		return
 	}
-
+	// 所有的服务器都 适用
 	if rf.currentTerm < args.Term {
-		Debug(rf, dError, "%s[%s,%d]< %s[%d]", rf.Name(), rf.State(), rf.currentTerm, getServerName(args.CandidateId),
-			args.Term)
-		rf.currentTerm = args.Term
-		rf.votedFor = args.CandidateId
-		if rf.state != Follower {
-			reply.VoteGranted = true
-			rf.lastHeart = time.Now()
-			rf.state = Follower
-			Debug(rf, dError, "%s 过期", rf.Name())
-			return
-		}
+		rf.updateTermIfCurTermLow(args.Term)
+		rf.votedFor = -1
+		Debug(rf, dError, "%s 过期", rf.Name())
 	}
 
 	//这轮 已经投过别人了
 	if rf.votedFor != -1 && rf.votedFor != args.CandidateId {
 		return
 	}
+	Debug(rf, dVote, "%s[%s,%d]< %s[%d]", rf.Name(), rf.State(), rf.currentTerm, getServerName(args.CandidateId),
+		args.Term)
 
 	rf.votedFor = args.CandidateId
+	Debug(rf, dVote, "%s[%s] 投票给 %s: success %+v %v", rf.Name(), rf.State(), getServerName(args.CandidateId), reply)
 	rf.state = Candidate
 	reply.VoteGranted = true
-	rf.lastHeart = time.Now()
-	Debug(rf, dVote, "%s[%s] 投票给 %s: success %+v %v", rf.Name(), rf.State(), getServerName(args.CandidateId), reply,
-		rf.lastHeart)
+	rf.electionTime = getNextElectionTime()
 	return
 }
 
@@ -316,90 +311,18 @@ func (rf *Raft) killed() bool {
 
 func (rf *Raft) ticker() {
 	for rf.killed() == false {
-
 		// Your code here (2A)
 		// Check if a leader election should be started.
 		rf.mu.Lock()
 		if rf.state == Leader {
-			rf.lastHeart = time.Now()
-			rf.mu.Unlock()
+			rf.leaderOp() // 会自己释放锁
+			time.Sleep(heartTime)
 			continue
 		}
 		// 心跳超时, 或者 当前是选举者的状态
-		if time.Now().Sub(rf.lastHeart) > heartTimeOut || rf.state == Candidate {
-			Debug(rf, dTimer, "%s:%v  %v start a new election ", rf.Name(), rf.State(), rf.lastHeart)
-			rf.state = Candidate
-			rf.currentTerm++
-			rf.votedFor = rf.me
-			term := rf.currentTerm
-			count := 1
-			n := len(rf.peers)
-			wg := sync.WaitGroup{}
-			cond := sync.NewCond(&sync.Mutex{})
+		if time.Now().After(rf.electionTime) {
+			rf.election()
 
-			rf.mu.Unlock()
-
-			// 通知
-			var i = 0
-			for ; i < n; i++ {
-				if i == rf.me {
-					continue
-				}
-				wg.Add(1)
-				go func(other, leaderTerm int) {
-					defer wg.Done()
-					var (
-						req   RequestVoteArgs
-						reply RequestVoteReply
-					)
-					req.Term = leaderTerm
-					req.CandidateId = rf.me
-					call := rf.sendRequestVote(other, &req, &reply)
-					Debug(rf, dVote, "%s -> % s[call:%t] req: %+v ans: %+v", rf.Name(), getServerName(other), call, req, reply)
-					if !call && reply.VoteGranted == true {
-						panic("rpc call failed but get vote")
-					}
-					if !call {
-						return
-					}
-
-					rf.mu.Lock()
-					if reply.Term > leaderTerm {
-						rf.updateTermIfCurTermLow(reply.Term)
-
-					} else {
-						if reply.VoteGranted == false {
-							Debug(rf, dError, "%s is 没有获取到 %s 票", rf.Name(), getServerName(other))
-						} else {
-							Debug(rf, dVote, "%s is 获取到 %s 票 count:%v", rf.Name(), getServerName(other), count)
-							count++
-							if count > n/2 {
-								cond.Broadcast()
-							}
-						}
-					}
-					rf.mu.Unlock()
-				}(i, term)
-			}
-			go func() {
-				wg.Wait()
-				cond.Broadcast()
-			}()
-			cond.L.Lock()
-			cond.Wait()
-
-			rf.mu.Lock()
-			Debug(rf, dVote, "%s get count %d %d", rf.Name(), count, len(rf.peers)/2)
-			if count > len(rf.peers)/2 && rf.state == Candidate {
-				rf.state = Leader
-				rf.cond.Broadcast() // 唤醒 Leader 操作
-				Debug(rf, dVote, "%s now is leader", rf.Name())
-			} else {
-				Debug(rf, dError, "%s 选举失败", rf.Name())
-				if rf.state == Candidate {
-					Debug(rf, dVote, "%s retry selection", rf.Name())
-				}
-			}
 		}
 		rf.mu.Unlock()
 		// pause for a random amount of time between 50 and 350
@@ -408,6 +331,7 @@ func (rf *Raft) ticker() {
 		time.Sleep(time.Duration(ms) * time.Millisecond)
 	}
 }
+
 func (rf *Raft) State() string {
 	return rf.state.String()
 }
@@ -415,70 +339,44 @@ func (rf *Raft) Name() string {
 	return getServerName(rf.me)
 }
 func (rf *Raft) leaderOp() {
+	term := rf.currentTerm
+	name := rf.Name()
+	state := rf.State()
+	rf.mu.Unlock()
 
-	for rf.killed() == false {
-		time.Sleep(heartBeatTime)
-		rf.mu.Lock()
-		rf.cond.L.Lock()
-		for rf.state != Leader {
-			Debug(rf, dInfo, "%s: %s wait", rf.Name(), rf.State())
-			rf.mu.Unlock()
-			rf.cond.Wait()
-			rf.mu.Lock()
+	//Debug(rfdLeader, "%s Term: %d send heartbeat", rf.Name(), term)
+	wg := &sync.WaitGroup{}
+	for i, _ := range rf.peers {
+		if i == rf.me {
+			continue
 		}
-		// rf.state == Leader
-		rf.lastHeart = time.Now()
-		term := rf.currentTerm
-		n := len(rf.peers)
-
-		name := rf.Name()
-		state := rf.State()
-		rf.mu.Unlock()
-
-		//Debug(rfdLeader, "%s Term: %d send heartbeat", rf.Name(), term)
-		wg := sync.WaitGroup{}
-
-		for i := 0; i < n; i++ {
-			if i == rf.me {
-				continue
-			}
-
-			wg.Add(1)
-			go func(idx int, leaderTerm int) {
-				defer wg.Done()
-				var (
-					args  AppendEntriesArgs
-					reply AppendEntriesReply
-				)
-				t := time.Now()
-				args.Term = leaderTerm
-				args.LeaderId = rf.me
-				call := rf.appendEntries(idx, &args, &reply)
-				DebugT(t, dLeader, "%s[%s] -> %s call:%v req: %+v ans %+v", name, state, getServerName(idx),
-					call,
-					args, reply)
-				if !call && (reply.Success == true || reply.Term != 0) {
-					panic("Leader: rpc call failed but get ans")
-				}
-				if reply.Term > leaderTerm {
-					if reply.Success == true {
-						panic("should false")
-					}
-					// 如果一个 candidate 或者 leader 发现自己的任期号过期了，它就会立刻回到 follower 状态。
-					rf.mu.Lock()
-					rf.updateTermIfCurTermLow(term)
-					rf.mu.Unlock()
-					return
-				}
-
-			}(i, term)
-		}
-		wg.Wait()
-		Debug(rf, dLeader, "%s leader op done", name)
-		
-		rf.cond.L.Unlock()
+		wg.Add(1)
+		go rf.appendMsg(wg, name, true, state, term, i)
 	}
-	Debug(rf, "%s leader leave", rf.Name())
+}
+
+func (rf *Raft) appendMsg(wg *sync.WaitGroup, name string, heart bool, state string, term int, idx int) {
+	defer wg.Done()
+	var (
+		args  AppendEntriesArgs
+		reply AppendEntriesReply
+	)
+	args.Term = term
+	args.LeaderId = rf.me
+	call := rf.appendEntries(idx, &args, &reply)
+	Debug(rf, dLeader, "%s[%s] -> %s call:%v req: %+v ans %+v", name, state, getServerName(idx), call, args, reply)
+	if !call && (reply.Success == true || reply.Term != 0) {
+
+		panic("Leader: rpc call failed but get ans")
+	}
+	rf.mu.Lock()
+	if reply.Term > rf.currentTerm {
+		// 如果一个 candidate 或者 leader 发现自己的任期号过期了，它就会立刻回到 follower 状态。
+		rf.updateTermIfCurTermLow(reply.Term)
+	}
+	rf.mu.Unlock()
+	return
+
 }
 
 // the service or tester wants to create a Raft server. the ports
@@ -492,6 +390,7 @@ func (rf *Raft) leaderOp() {
 // for any long-running work.
 func Make(peers []*labrpc.ClientEnd, me int,
 	persister *Persister, applyCh chan ApplyMsg) *Raft {
+	runtime.GOMAXPROCS(8)
 	rf := &Raft{}
 	rf.peers = peers
 	rf.persister = persister
@@ -502,17 +401,14 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.votedFor = -1
 	rf.state = Follower
 	rf.currentTerm = 0
-	rf.lastHeart = time.Now()
+	rf.electionTime = getNextElectionTime()
 
 	//rf.timeTicker = time.NewTicker(getRandTime())
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
-	rf.cond = sync.NewCond(&sync.Mutex{})
-
 	// start ticker goroutine to start elections
 	go rf.ticker()
-	go rf.leaderOp() // state == Leader
 
 	Debug(rf, dInfo, "%s Make ", rf.Name())
 	return rf
@@ -540,6 +436,9 @@ type AppendEntriesReply struct {
 	Success bool // true if follower contained entry matching prevLogIndex and prevLogTerm
 }
 
+func getNextElectionTime() time.Time {
+	return time.Now().Add(heartTimeOut)
+}
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs,
 	reply *AppendEntriesReply) {
 	// Your code here (2A, 2B).
@@ -553,17 +452,89 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs,
 		// 如果这个 leader 的任期号小于这个 candidate 的当前任期号，那么这个 candidate 就会拒绝这次 RPC，然后继续保持 candidate 状态。
 		return
 	}
-	rf.lastHeart = time.Now() // 更新心跳时间
+
+	// 所有服务器遵守的规则
 	reply.Success = true
-
+	Debug(rf, dTimer, "%s[%s]<- %s [term: %d] ", rf.Name(), rf.State(), getServerName(args.LeaderId), args.Term)
+	if rf.currentTerm < args.Term {
+		rf.state = Follower
+		rf.currentTerm = args.Term
+		return
+	}
 	//如果这个 leader 的任期号（这个任期号会在这次 RPC 中携带着）不小于这个 candidate 的当前任期号，那么这个 candidate 就会觉得这个 leader 是合法的，然后将自己转变为 follower 状态。
+	// 当前任期 curTerm = args.Term
 	rf.state = Follower
-	Debug(rf, dTimer, "%s[%s]<- %s [term: %d] %v", rf.Name(), rf.State(), getServerName(args.LeaderId), args.Term, rf.lastHeart)
-	rf.currentTerm = args.Term // rf.currentTerm < args.Term
-
+	rf.electionTime = getNextElectionTime() // 更新心跳时间
 	return
 }
 func (rf *Raft) appendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	return ok
+}
+
+func assert(test bool) {
+	if test {
+		panic("")
+	}
+}
+
+func (rf *Raft) election() {
+	rf.state = Candidate
+	rf.currentTerm++
+	Debug(rf, dTimer, "%s:%v  %v start a new %v election ", rf.Name(), rf.State(), time.Now(), rf.currentTerm+1)
+	rf.votedFor = rf.me
+	term := rf.currentTerm
+	rf.electionTime = getNextElectionTime()
+	count := 1
+	go func() {
+		wg := &sync.WaitGroup{}
+		// 通知
+		for other, _ := range rf.peers {
+			if other == rf.me {
+				continue
+			}
+			wg.Add(1)
+			go rf.sendVoteRequest(wg, &count, other, term)
+		}
+		wg.Wait()
+		rf.mu.Lock()
+		if rf.state == Candidate {
+			rf.electionTime = time.Now() // 再次选举
+			Debug(rf, dError, "%s 选举失败 retry selection", rf.Name())
+		}
+		rf.mu.Unlock()
+	}()
+
+}
+
+func (rf *Raft) sendVoteRequest(wg *sync.WaitGroup, count *int, other int, curTerm int) {
+	defer wg.Done()
+	var (
+		req   RequestVoteArgs
+		reply RequestVoteReply
+	)
+
+	req.Term = curTerm
+	req.CandidateId = rf.me
+	call := rf.sendRequestVote(other, &req, &reply)
+	Debug(rf, dVote, "%s -> % s[call:%t] req: %+v ans: %+v", rf.Name(), getServerName(other), call, req, reply)
+
+	assert(!call && reply.VoteGranted == true)
+
+	rf.mu.Lock()
+	if reply.Term > rf.currentTerm {
+		rf.updateTermIfCurTermLow(reply.Term)
+	} else {
+		if reply.VoteGranted == false {
+			Debug(rf, dError, "%s is 没有获取到 %s 票", rf.Name(), getServerName(other))
+		} else {
+			Debug(rf, dVote, "%s is 获取到 %s 票 count:%v", rf.Name(), getServerName(other), *count)
+			*count++
+			if *count > len(rf.peers)/2 && rf.state == Candidate {
+				Debug(rf, dVote, "%s now is leader", rf.Name())
+				rf.state = Leader
+			}
+		}
+	}
+	rf.mu.Unlock()
 }
