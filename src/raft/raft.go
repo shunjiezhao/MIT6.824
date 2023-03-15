@@ -18,7 +18,6 @@ package raft
 //
 
 import (
-	"fmt"
 	//	"bytes"
 	"math/rand"
 	"runtime"
@@ -76,7 +75,7 @@ type Raft struct {
 type state uint8
 
 const (
-	heartTime    = time.Microsecond * 150
+	heartTime    = time.Microsecond * 200
 	heartTimeOut = time.Second
 	Follower     = iota
 	Candidate
@@ -183,13 +182,14 @@ type RequestVoteReply struct {
 }
 
 // 必须持有锁
-func (rf *Raft) updateTermIfCurTermLow(term int) {
-	if term < rf.currentTerm {
-		panic(fmt.Sprintf("%v %v", term, rf.currentTerm))
+func (rf *Raft) curTermLow(term int) bool {
+	if term <= rf.currentTerm {
+		return false
 	}
 
 	rf.state = Follower
 	rf.currentTerm = term
+	return true
 }
 
 // example RequestVote RPC handler.
@@ -208,8 +208,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		return
 	}
 	// 所有的服务器都 适用
-	if rf.currentTerm < args.Term {
-		rf.updateTermIfCurTermLow(args.Term)
+	if rf.curTermLow(args.Term) {
 		rf.votedFor = -1
 		Debug(rf, dError, "%s 过期", rf.Name())
 	}
@@ -370,9 +369,8 @@ func (rf *Raft) appendMsg(wg *sync.WaitGroup, name string, heart bool, state str
 		panic("Leader: rpc call failed but get ans")
 	}
 	rf.mu.Lock()
-	if reply.Term > rf.currentTerm {
+	if rf.curTermLow(reply.Term) {
 		// 如果一个 candidate 或者 leader 发现自己的任期号过期了，它就会立刻回到 follower 状态。
-		rf.updateTermIfCurTermLow(reply.Term)
 	}
 	rf.mu.Unlock()
 	return
@@ -522,8 +520,8 @@ func (rf *Raft) sendVoteRequest(wg *sync.WaitGroup, count *int, other int, curTe
 	assert(!call && reply.VoteGranted == true)
 
 	rf.mu.Lock()
-	if reply.Term > rf.currentTerm {
-		rf.updateTermIfCurTermLow(reply.Term)
+	if rf.curTermLow(reply.Term) {
+
 	} else {
 		if reply.VoteGranted == false {
 			Debug(rf, dError, "%s is 没有获取到 %s 票", rf.Name(), getServerName(other))
