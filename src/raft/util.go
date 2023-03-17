@@ -2,35 +2,35 @@ package raft
 
 import (
 	"fmt"
-	"log"
+	logP "log"
 	"os"
 	"strconv"
 	"time"
 )
 
-type logTopic string
+type logPTopic string
 
 const (
-	dClient  logTopic = "CLNT"
-	dCommit  logTopic = "CMIT"
-	dDrop    logTopic = "DROP"
-	dError   logTopic = "ERRO"
-	dInfo    logTopic = "INFO"
-	dLeader  logTopic = "LEAD"
-	dLog     logTopic = "LOG1"
-	dLog2    logTopic = "LOG2"
-	dPersist logTopic = "PERS"
-	dSnap    logTopic = "SNAP"
-	dTerm    logTopic = "TERM"
-	dTest    logTopic = "TEST"
-	dTimer   logTopic = "TIMR"
-	dTrace   logTopic = "TRCE"
-	dVote    logTopic = "VOTE"
-	dWarn    logTopic = "WARN"
+	dClient  logPTopic = "CLNT"
+	dCommit  logPTopic = "CMIT"
+	dDrop    logPTopic = "DROP"
+	dError   logPTopic = "ERRO"
+	dInfo    logPTopic = "INFO"
+	dLeader  logPTopic = "LEAD"
+	dTest    logPTopic = "TEST"
+	dlog2    logPTopic = "log2"
+	dPersist logPTopic = "PERS"
+	dSnap    logPTopic = "SNAP"
+	dTerm    logPTopic = "TERM"
+	dlog     logPTopic = "log1"
+	dTimer   logPTopic = "TIMR"
+	dTrace   logPTopic = "TRCE"
+	dVote    logPTopic = "VOTE"
+	dWarn    logPTopic = "WARN"
 )
 
 // Debugging
-var _debug = false
+var _debug = true
 
 var debugStart time.Time
 var debugVerbosity int
@@ -43,7 +43,7 @@ func getVerbosity() int {
 		var err error
 		level, err = strconv.Atoi(v)
 		if err != nil {
-			log.Fatalf("Invalid verbosity %v", v)
+			logP.Fatalf("Invalid verbosity %v", v)
 		}
 	}
 	return level
@@ -51,27 +51,27 @@ func getVerbosity() int {
 func init() {
 	debugVerbosity = getVerbosity()
 	debugStart = time.Now()
-	log.SetFlags(log.Flags() &^ (log.Ldate | log.Ltime))
+	logP.SetFlags(logP.Flags() &^ (logP.Ldate | logP.Ltime))
 }
 
-func Debug(rf *Raft, topic logTopic, format string, a ...interface{}) {
+func Debug(rf *Raft, topic logPTopic, format string, a ...interface{}) {
 	if _debug {
 		time := time.Since(debugStart).Microseconds()
 		time /= 100
 		prefix := fmt.Sprintf("%06d %v ", time, string(topic))
 		format = prefix + format
 		if rf == nil || rf.killed() == false {
-			log.Printf(format, a...)
+			logP.Printf(format, a...)
 		}
 	}
 }
-func DebugT(t time.Time, topic logTopic, format string, a ...interface{}) {
+func DebugT(t time.Time, topic logPTopic, format string, a ...interface{}) {
 	if _debug {
 		time := t.Sub(debugStart).Microseconds()
 		time /= 100
 		prefix := fmt.Sprintf("%06d %v ", time, string(topic))
 		format = prefix + format
-		log.Printf(format, a...)
+		logP.Printf(format, a...)
 	}
 }
 
