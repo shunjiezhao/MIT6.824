@@ -31,7 +31,7 @@ const (
 )
 
 // Debugging
-var _debug = false
+var _debug = true
 
 var debugStart time.Time
 var debugVerbosity int
@@ -56,6 +56,9 @@ func init() {
 }
 
 func Debug(rf *Raft, topic logTopic, format string, a ...interface{}) {
+	if topic == DHeart {
+		return
+	}
 	if _debug {
 		time := time.Since(debugStart).Microseconds()
 		time /= 100

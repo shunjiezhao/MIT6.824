@@ -86,11 +86,11 @@ type Raft struct {
 type state uint8
 
 const (
-	heartTime    = time.Microsecond * 200
-	heartTimeOut = time.Second
-	Follower     = iota
+	Follower = iota
 	Candidate
 	Leader
+	heartTime    = time.Microsecond * 300
+	heartTimeOut = time.Second
 )
 
 func (s state) String() string {
@@ -423,11 +423,11 @@ func (rf *Raft) apply() {
 
 func (rf *Raft) shouldApplyL() bool {
 	panicIf(rf.lastApplied > rf.commitIndex, "")
-	Debug(rf, dTest, "%s last: %d commit: %d", rf.Name(), rf.lastApplied, rf.commitIndex)
 	if rf.lastApplied >= rf.commitIndex { // 当提交的都已经被应用了
 		return false
 	}
 	// start and last index
+	Debug(rf, dTest, "%s should apply last: %d commit: %d", rf.Name(), rf.lastApplied, rf.commitIndex)
 
 	return true
 }

@@ -28,7 +28,7 @@ type AppendEntriesReply struct {
 
 func (rf *Raft) printAppendReplyLog(args *AppendEntriesArgs) {
 	var ty logTopic = dLog
-	if juegeHeart(args.Entries) == false {
+	if juegeHeart(args.Entries) {
 		ty = DHeart
 	}
 	Debug(rf, ty, "%s[%s]<- %s [term: %d]: %v ", rf.Name(), rf.State(), getServerName(args.LeaderId), args.Term, args)
@@ -49,13 +49,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	if rf.currentTerm > args.Term { // rule 1
 		Debug(rf, dWarn, "%s found leader %s 过期", rf.Name(), getServerName(args.LeaderId))
+		reply.Success = false
 		//如果一个节点接收了一个带着过期的任期号的请求，那么它会拒绝这次请求。
 		// 如果这个 leader 的任期号小于这个 candidate 的当前任期号，那么这个 candidate 就会拒绝这次 RPC，然后继续保持 candidate 状态。
 		return
-	}
-
-	if juegeHeart(args.Entries) {
-		goto done
 	}
 
 	//返回假 如果接收者日志中没有包含这样一个条目 即该条目的任期在 prevLogIndex 上能和 prevLogTerm 匹配上
@@ -74,16 +71,19 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			continue
 		}
 
+		// index < last index 所以冲突
 		if rf.log.entryAt(index).Term != entry.Term {
 			Debug(rf, dWarn, "%s cut log entry", rf.name)
+			prevL := rf.log.lastLogIndex()
 			rf.log.cut2end(index - 1)
+			panicIf(prevL == rf.log.lastLogIndex(), "")
+			rf.AppendLogL(entry)
 		} else {
 			continue // term 相等 并且 index 相等
 		}
 
 	}
 
-done:
 	prev = rf.commitIndex
 	// 如果领导人的已知已提交的最高日志条目的索引大于接收者的已知已提交最高日志条目的索引（leaderCommit > commitIndex），
 	if args.LeaderCommit > rf.commitIndex {
@@ -91,14 +91,16 @@ done:
 		rf.commitIndex = min(args.LeaderCommit, rf.log.lastLogIndex())
 	}
 
-	Debug(rf, dCommit, "%s update commit Index: %d -> %d", rf.name, prev, rf.commitIndex)
+	Debug(rf, dCommit, "%s <- [%s] update commit Index: %d -> %d", rf.name, getServerName(args.LeaderId), prev, rf.commitIndex)
 
 	//如果这个 leader 的任期号（这个任期号会在这次 RPC 中携带着）不小于这个 candidate 的当前任期号，那么这个 candidate 就会觉得这个 leader 是合法的，然后将自己转变为 follower 状态。
 	// 当前任期 curTerm = args.Term
 	rf.state = Follower
 	rf.refreshElectionTime() // 更新心跳时间
 	reply.Success = true
-	rf.signLogEnter()
+	if rf.shouldApplyL() {
+		rf.signLogEnter()
+	}
 	return
 }
 
@@ -128,7 +130,9 @@ func (rf *Raft) appendMsg(idx int, args *AppendEntriesArgs) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	rf.procAppendReplyL(idx, args, &reply)
+	if rf.state == Leader {
+		rf.procAppendReplyL(idx, args, &reply)
+	}
 }
 func (rf *Raft) AppendMsgL(heart bool) {
 	for i, _ := range rf.peers {
@@ -137,6 +141,7 @@ func (rf *Raft) AppendMsgL(heart bool) {
 		}
 		var log []LogEntry
 		if heart == false {
+			Debug(rf, dLog2, "%s send log to %s [%d: %d]", rf.name, getServerName(i), rf.nextIndex[i], rf.log.lastLogIndex())
 			if rf.nextIndex[i] <= rf.log.lastLogIndex() {
 				log = rf.log.cloneRange(rf.nextIndex[i], rf.log.lastLogIndex())
 			} else {
@@ -167,6 +172,8 @@ func (rf *Raft) SendLogLG(idx int, entries []LogEntry) {
 }
 
 func (rf *Raft) procAppendReplyL(idx int, args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	panicIf(rf.state != Leader, "")
+
 	if rf.curTermLowL(reply.Term) {
 		// 如果一个 candidate 或者 leader 发现自己的任期号过期了，它就会立刻回到 follower 状态。
 		return
@@ -175,19 +182,20 @@ func (rf *Raft) procAppendReplyL(idx int, args *AppendEntriesArgs, reply *Append
 	if args.Term != rf.currentTerm {
 		return
 	}
+	if juegeHeart(args.Entries) {
+		return
+	}
 
 	if reply.Success {
 		panicIf(rf.state != Leader, "")
 		// 如果成功：更新相应跟随者的 nextIndex 和 matchIndex
 		rf.nextIndex[idx] = max(args.PrevLogIndex+len(args.Entries), rf.nextIndex[idx])
 		rf.matchIndex[idx] = max(args.PrevLogIndex+len(args.Entries), rf.matchIndex[idx])
-
 		Debug(rf, dLeader, "%s update %s next: %d match: %d", rf.Name(), getServerName(idx), rf.nextIndex[idx], rf.matchIndex[idx])
 	} else {
 		Debug(rf, dLog, "%s retry to send log to %s", rf.name, getServerName(idx))
 		rf.nextIndex[idx] = max(1, rf.nextIndex[idx]-1)                                // 如果因为日志不一致而失败，则 nextIndex 递减并重试
 		rf.SendLogLG(idx, rf.log.cloneRange(rf.nextIndex[idx], rf.log.lastLogIndex())) //
-
 	}
 
 	rf.updateCommitIndexL()
@@ -195,7 +203,6 @@ func (rf *Raft) procAppendReplyL(idx int, args *AppendEntriesArgs, reply *Append
 func (rf *Raft) updateCommitIndexL() {
 	panicIf(rf.state != Leader, "")
 	Debug(rf, dInfo, "%s update commit index; before: %d", rf.Name(), rf.commitIndex)
-	// 假设存在 N 满足N > commitIndex，使得大多数的 matchIndex[i] ≥ N以及log[N].term == currentTerm 成立，则令 commitIndex = N（5.3 和 5.4 节）
 	start := max(rf.commitIndex+1, rf.log.start())
 
 	for index := start; index <= rf.log.lastLogIndex(); index++ {
@@ -205,7 +212,8 @@ func (rf *Raft) updateCommitIndexL() {
 				count++
 			}
 		}
-		if count > len(rf.peers)/2 {
+		// 假设存在 N 满足N > commitIndex，使得大多数的 matchIndex[i] ≥ N以及log[N].term == currentTerm 成立，则令 commitIndex = N（5.3 和 5.4 节）
+		if count > len(rf.peers)/2 && rf.log.entryAt(index).Term == rf.currentTerm {
 			rf.commitIndex = index
 		}
 	}
