@@ -19,6 +19,8 @@ const (
 	dLeader  logTopic = "LEAD"
 	dLog     logTopic = "LOG1"
 	DHeart   logTopic = "Heart"
+	DIndex   logTopic = "Index"
+	DSys     logTopic = "SYS"
 	dLog2    logTopic = "LOG2"
 	dPersist logTopic = "PERS"
 	dSnap    logTopic = "SNAP"
@@ -31,7 +33,7 @@ const (
 )
 
 // Debugging
-var _debug = true
+var _debug = false
 
 var debugStart time.Time
 var debugVerbosity int

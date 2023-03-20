@@ -27,7 +27,9 @@ func (l *Log) nextLogIndex() int {
 	return len(l.logs)
 }
 func mkLog() Log {
-	return Log{logs: make([]LogEntry, 1), index0: 0}
+	log := Log{logs: make([]LogEntry, 1), index0: 0}
+	log.logs[0] = LogEntry{Term: 0}
+	return log
 }
 
 // return logs[x:y]
