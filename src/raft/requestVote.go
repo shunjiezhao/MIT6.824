@@ -53,11 +53,10 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		return
 	}
 
-	Debug(rf, dVote, "%s[%s,%d]< %s[%d]", rf.Name(), rf.State(), rf.currentTerm, getServerName(args.CandidateId),
+	Debug(rf, dVote, "%s[%s,%d] 投票给  %s[%d]", rf.Name(), rf.State(), rf.currentTerm, getServerName(args.CandidateId),
 		args.Term)
 
 	rf.votedFor = args.CandidateId
-	Debug(rf, dVote, "%s[%s] 投票给 %s: success %+v %v", rf.Name(), rf.State(), getServerName(args.CandidateId), reply)
 	rf.state = Candidate
 	reply.VoteGranted = true
 	rf.refreshElectionTime()
@@ -78,7 +77,6 @@ func (rf *Raft) SendVoteRequestL() {
 				LastLogIndex: nIdx,
 				LastLogTerm:  rf.log.entryAt(nIdx).Term,
 			}
-			Debug(rf, dInfo, "%s->%s request args: %+v", rf.Name(), getServerName(other), req)
 			go rf.sendVoteRequest(wg, &count, other, &req)
 		}
 	}
@@ -87,7 +85,7 @@ func (rf *Raft) SendVoteRequestL() {
 		rf.mu.Lock()
 		if rf.state == Candidate {
 			rf.electionTime = time.Now() // 再次选举
-			Debug(rf, dError, "%s 选举失败 retry selection", rf.Name())
+			Debug(rf, dWarn, "%s 选举失败 retry selection", rf.Name())
 		}
 		rf.mu.Unlock()
 	}()

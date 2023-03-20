@@ -231,14 +231,13 @@ func (rf *Raft) Start(command interface{}) (index int, term int, isLeader bool) 
 		Term:    rf.currentTerm,
 		Command: command,
 	}
-	Debug(rf, dInfo, "%s Start %d %v begin", rf.Name(), term, isLeader)
 
 	index = rf.log.nextLogIndex()
 	panicIf(index != rf.log.lastLogIndex()+1, "")
 	rf.AppendLogL(entry)
 	rf.AppendMsgL(false)
 	// Your code here (2B).
-	Debug(rf, dInfo, "%s Start apply: %d commit:%v next: %v  done", rf.Name(), rf.lastApplied, rf.commitIndex, rf.log.nextLogIndex())
+	Debug(rf, DSys, "%s start command", rf.name)
 	return index, rf.currentTerm, true
 }
 func (rf *Raft) AppendLogL(log LogEntry) {
@@ -259,7 +258,7 @@ func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
 	rf.mu.Lock()
-	Debug(nil, "%s Killed", rf.State())
+	Debug(nil, DSys, "%s Killed", rf.State())
 	rf.mu.Unlock()
 }
 
@@ -344,7 +343,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	go rf.ticker()
 	go rf.apply()
 
-	Debug(rf, dInfo, "%s Make ", rf.Name())
+	Debug(rf, DSys, "%s Make ", rf.Name())
 	return rf
 }
 
@@ -365,7 +364,7 @@ func panicIf(test bool, str string) {
 }
 
 func (rf *Raft) electionL() {
-	Debug(rf, dTimer, "%s:%v  %v index0 a new %v election ", rf.Name(), rf.State(), time.Now(), rf.currentTerm+1)
+	Debug(rf, dVote, "%s:%v  %v index0 a new %v election ", rf.Name(), rf.State(), time.Now(), rf.currentTerm+1)
 	rf.state = Candidate
 	rf.currentTerm++
 	rf.votedFor = rf.me
@@ -393,7 +392,7 @@ func (rf *Raft) termLowL(term int) {
 func (rf *Raft) freshNextSliceL() {
 	for i, _ := range rf.peers {
 		rf.nextIndex[i] = rf.log.nextLogIndex()
-		Debug(rf, dInfo, "%s update %s next idx %d", rf.Name(), getServerName(i), rf.log.nextLogIndex())
+		Debug(rf, DIndex, "%s update %s next idx %d", rf.Name(), getServerName(i), rf.log.nextLogIndex())
 		rf.matchIndex[i] = 0
 	}
 }
@@ -417,7 +416,7 @@ func (rf *Raft) apply() {
 		rf.applyCh <- msg
 
 		rf.mu.Lock()
-		Debug(rf, dTrace, "%s apply idx %d msg", rf.Name(), rf.lastApplied)
+		Debug(rf, dLog, "%s apply idx %d msg", rf.Name(), rf.lastApplied)
 	}
 }
 
@@ -434,5 +433,4 @@ func (rf *Raft) shouldApplyL() bool {
 
 func (rf *Raft) signLogEnter() {
 	rf.logCond.Broadcast()
-	Debug(rf, dWarn, "%s sign apply", rf.Name())
 }

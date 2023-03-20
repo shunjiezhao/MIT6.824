@@ -62,12 +62,15 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		Debug(rf, dWarn, "%s <- %s 传递的日志不连续", rf.name, getServerName(args.LeaderId))
 		return
 	}
+
+	prev = rf.commitIndex
 	//如果一个已经存在的条目和新条目（译者注：即刚刚接收到的日志条目）发生了冲突（因为索引相同，任期不同），那么就删除这个已经存在的条目以及它之后的所有条目 （5.3 节）
 	for i, entry := range args.Entries {
 		index := args.PrevLogIndex + i + 1 //next
 		if rf.log.lastLogIndex() < index {
 			Debug(rf, dLog, "%s append log entry", rf.name)
 			rf.AppendLogL(entry) // 追加日志中尚未存在的任何新条目
+
 			continue
 		}
 
@@ -75,7 +78,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		if rf.log.entryAt(index).Term != entry.Term {
 			Debug(rf, dWarn, "%s cut log entry", rf.name)
 			prevL := rf.log.lastLogIndex()
-			rf.log.cut2end(index - 1)
+			rf.log.cut2end(index - 1) // 可能被覆盖
+			rf.commitIndex = min(rf.commitIndex, rf.log.lastLogIndex())
+			rf.lastApplied = min(rf.lastApplied, rf.commitIndex)
 			panicIf(prevL == rf.log.lastLogIndex(), "")
 			rf.AppendLogL(entry)
 		} else {
@@ -84,15 +89,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	}
 
-	prev = rf.commitIndex
-	// 如果领导人的已知已提交的最高日志条目的索引大于接收者的已知已提交最高日志条目的索引（leaderCommit > commitIndex），
 	if args.LeaderCommit > rf.commitIndex {
+		// 如果领导人的已知已提交的最高日志条目的索引大于接收者的已知已提交最高日志条目的索引（leaderCommit > commitIndex），
+		rf.commitIndex = min(args.LeaderCommit, args.PrevLogIndex+len(args.Entries))
 		// 则把接收者的已知已经提交的最高的日志条目的索引commitIndex 重置为 领导人的已知已经提交的最高的日志条目的索引 leaderCommit 或者是 上一个新条目的索引 取两者的最小值
-		rf.commitIndex = min(args.LeaderCommit, rf.log.lastLogIndex())
 	}
-
 	Debug(rf, dCommit, "%s <- [%s] update commit Index: %d -> %d", rf.name, getServerName(args.LeaderId), prev, rf.commitIndex)
-
 	//如果这个 leader 的任期号（这个任期号会在这次 RPC 中携带着）不小于这个 candidate 的当前任期号，那么这个 candidate 就会觉得这个 leader 是合法的，然后将自己转变为 follower 状态。
 	// 当前任期 curTerm = args.Term
 	rf.state = Follower
@@ -140,16 +142,13 @@ func (rf *Raft) AppendMsgL(heart bool) {
 			continue
 		}
 		var log []LogEntry
-		if heart == false {
-			Debug(rf, dLog2, "%s send log to %s [%d: %d]", rf.name, getServerName(i), rf.nextIndex[i], rf.log.lastLogIndex())
-			if rf.nextIndex[i] <= rf.log.lastLogIndex() {
-				log = rf.log.cloneRange(rf.nextIndex[i], rf.log.lastLogIndex())
-			} else {
-				continue // 没有日志可以发送
-			}
+		if rf.nextIndex[i] <= rf.log.lastLogIndex() {
+			Debug(rf, dLog, "%s send log to %s [%d: %d]", rf.name, getServerName(i), rf.nextIndex[i], rf.log.lastLogIndex())
+			log = rf.log.cloneRange(rf.nextIndex[i], rf.log.lastLogIndex())
+		} else if heart == false {
+			continue // 没有日志可以发送
 		}
 
-		panicIf(juegeHeart(log) != heart, "")
 		rf.SendLogLG(i, log)
 	}
 }
@@ -182,18 +181,14 @@ func (rf *Raft) procAppendReplyL(idx int, args *AppendEntriesArgs, reply *Append
 	if args.Term != rf.currentTerm {
 		return
 	}
-	if juegeHeart(args.Entries) {
-		return
-	}
 
 	if reply.Success {
-		panicIf(rf.state != Leader, "")
 		// 如果成功：更新相应跟随者的 nextIndex 和 matchIndex
-		rf.nextIndex[idx] = max(args.PrevLogIndex+len(args.Entries), rf.nextIndex[idx])
+		rf.nextIndex[idx] = max(args.PrevLogIndex+len(args.Entries)+1, rf.nextIndex[idx])
 		rf.matchIndex[idx] = max(args.PrevLogIndex+len(args.Entries), rf.matchIndex[idx])
-		Debug(rf, dLeader, "%s update %s next: %d match: %d", rf.Name(), getServerName(idx), rf.nextIndex[idx], rf.matchIndex[idx])
+		Debug(rf, DIndex, "%s update %s next: %d match: %d", rf.Name(), getServerName(idx), rf.nextIndex[idx], rf.matchIndex[idx])
 	} else {
-		Debug(rf, dLog, "%s retry to send log to %s", rf.name, getServerName(idx))
+		Debug(rf, dWarn, "%s retry to send log to %s", rf.name, getServerName(idx))
 		rf.nextIndex[idx] = max(1, rf.nextIndex[idx]-1)                                // 如果因为日志不一致而失败，则 nextIndex 递减并重试
 		rf.SendLogLG(idx, rf.log.cloneRange(rf.nextIndex[idx], rf.log.lastLogIndex())) //
 	}
@@ -202,10 +197,13 @@ func (rf *Raft) procAppendReplyL(idx int, args *AppendEntriesArgs, reply *Append
 }
 func (rf *Raft) updateCommitIndexL() {
 	panicIf(rf.state != Leader, "")
-	Debug(rf, dInfo, "%s update commit index; before: %d", rf.Name(), rf.commitIndex)
+	prev := rf.commitIndex // for debug
 	start := max(rf.commitIndex+1, rf.log.start())
 
 	for index := start; index <= rf.log.lastLogIndex(); index++ {
+		if rf.log.entryAt(index).Term != rf.currentTerm {
+			continue
+		}
 		var count = 1
 		for perr, _ := range rf.peers {
 			if perr != rf.me && rf.matchIndex[perr] >= index {
@@ -213,10 +211,10 @@ func (rf *Raft) updateCommitIndexL() {
 			}
 		}
 		// 假设存在 N 满足N > commitIndex，使得大多数的 matchIndex[i] ≥ N以及log[N].term == currentTerm 成立，则令 commitIndex = N（5.3 和 5.4 节）
-		if count > len(rf.peers)/2 && rf.log.entryAt(index).Term == rf.currentTerm {
+		if count > len(rf.peers)/2 {
 			rf.commitIndex = index
 		}
 	}
-	Debug(rf, dCommit, "%s update commit index; after: %d", rf.Name(), rf.commitIndex)
+	Debug(rf, DIndex, "%s update commit index; %d -> %d", rf.Name(), prev, rf.commitIndex)
 	rf.signLogEnter()
 }
