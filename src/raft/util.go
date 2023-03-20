@@ -8,25 +8,26 @@ import (
 	"time"
 )
 
-type logPTopic string
+type logTopic string
 
 const (
-	dClient  logPTopic = "CLNT"
-	dCommit  logPTopic = "CMIT"
-	dDrop    logPTopic = "DROP"
-	dError   logPTopic = "ERRO"
-	dInfo    logPTopic = "INFO"
-	dLeader  logPTopic = "LEAD"
-	dTest    logPTopic = "TEST"
-	dlog2    logPTopic = "log2"
-	dPersist logPTopic = "PERS"
-	dSnap    logPTopic = "SNAP"
-	dTerm    logPTopic = "TERM"
-	dlog     logPTopic = "log1"
-	dTimer   logPTopic = "TIMR"
-	dTrace   logPTopic = "TRCE"
-	dVote    logPTopic = "VOTE"
-	dWarn    logPTopic = "WARN"
+	dClient  logTopic = "CLNT"
+	dCommit  logTopic = "CMIT"
+	dDrop    logTopic = "DROP"
+	dError   logTopic = "ERRO"
+	dInfo    logTopic = "INFO"
+	dLeader  logTopic = "LEAD"
+	dLog     logTopic = "LOG1"
+	DHeart   logTopic = "Heart"
+	dLog2    logTopic = "LOG2"
+	dPersist logTopic = "PERS"
+	dSnap    logTopic = "SNAP"
+	dTerm    logTopic = "TERM"
+	dTest    logTopic = "TEST"
+	dTimer   logTopic = "TIMR"
+	dTrace   logTopic = "TRCE"
+	dVote    logTopic = "VOTE"
+	dWarn    logTopic = "WARN"
 )
 
 // Debugging
@@ -54,7 +55,10 @@ func init() {
 	logP.SetFlags(logP.Flags() &^ (logP.Ldate | logP.Ltime))
 }
 
-func Debug(rf *Raft, topic logPTopic, format string, a ...interface{}) {
+func Debug(rf *Raft, topic logTopic, format string, a ...interface{}) {
+	if topic == DHeart {
+		return
+	}
 	if _debug {
 		time := time.Since(debugStart).Microseconds()
 		time /= 100
@@ -65,7 +69,7 @@ func Debug(rf *Raft, topic logPTopic, format string, a ...interface{}) {
 		}
 	}
 }
-func DebugT(t time.Time, topic logPTopic, format string, a ...interface{}) {
+func DebugT(t time.Time, topic logTopic, format string, a ...interface{}) {
 	if _debug {
 		time := t.Sub(debugStart).Microseconds()
 		time /= 100

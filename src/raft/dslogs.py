@@ -12,6 +12,8 @@ from rich.traceback import install
 # fmt: off
 # Mapping from topics to colors
 TOPICS = {
+    "HEART":"#E60000",
+
     "TIMR": "#9a9a99",
     "VOTE": "#67a0b2",
     "LEAD": "#d0b343",
