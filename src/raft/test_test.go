@@ -162,6 +162,7 @@ func TestRPCBytes2B(t *testing.T) {
 
 	cfg.one(99, servers, false)
 	bytes0 := cfg.bytesTotal()
+	bytes22 := bytes0
 
 	iters := 10
 	var sent int64 = 0
@@ -171,7 +172,9 @@ func TestRPCBytes2B(t *testing.T) {
 		if xindex != index {
 			t.Fatalf("got index %v but expected %v", xindex, index)
 		}
+		Debug(nil, dTest, "rpc bytes %v", cfg.bytesTotal()-bytes22)
 		sent += int64(len(cmd))
+		bytes22 = cfg.bytesTotal()
 	}
 
 	bytes1 := cfg.bytesTotal()
@@ -334,6 +337,7 @@ func TestFailNoAgree2B(t *testing.T) {
 	if n > 0 {
 		t.Fatalf("%v committed but no majority", n)
 	}
+	Debug(nil, dTest, "%d ", n)
 
 	// repair
 	cfg.connect((leader + 1) % servers)
@@ -509,6 +513,7 @@ func TestBackup2B(t *testing.T) {
 	cfg.disconnect((leader1 + 2) % servers)
 	cfg.disconnect((leader1 + 3) % servers)
 	cfg.disconnect((leader1 + 4) % servers)
+	println("leader1 : ", leader1)
 
 	// submit lots of commands that won't commit
 	for i := 0; i < 50; i++ {
@@ -527,11 +532,13 @@ func TestBackup2B(t *testing.T) {
 
 	// lots of successful commands to new group.
 	for i := 0; i < 50; i++ {
+		Debug(nil, DSys, "part1:%d ", i)
 		cfg.one(rand.Int(), 3, true)
 	}
 
 	// now another partitioned leader and one follower
 	leader2 := cfg.checkOneLeader()
+	println("leader2 : ", leader2)
 	other := (leader1 + 2) % servers
 	if leader2 == other {
 		other = (leader2 + 1) % servers
@@ -549,17 +556,21 @@ func TestBackup2B(t *testing.T) {
 	for i := 0; i < servers; i++ {
 		cfg.disconnect(i)
 	}
+	println("part3")
 	cfg.connect((leader1 + 0) % servers)
 	cfg.connect((leader1 + 1) % servers)
 	cfg.connect(other)
 
 	// lots of successful commands to new group.
 	for i := 0; i < 50; i++ {
+		println("part3: ", i)
 		cfg.one(rand.Int(), 3, true)
 	}
 
+	println("part4")
 	// now everyone
 	for i := 0; i < servers; i++ {
+		println("part4: ", i)
 		cfg.connect(i)
 	}
 	cfg.one(rand.Int(), servers, true)
@@ -577,6 +588,7 @@ func TestCount2B(t *testing.T) {
 	rpcs := func() (n int) {
 		for j := 0; j < servers; j++ {
 			n += cfg.rpcCount(j)
+			println(j, n)
 		}
 		return
 	}
@@ -686,7 +698,7 @@ func TestPersist12C(t *testing.T) {
 
 	cfg.one(11, servers, true)
 
-	// crash and re-start all
+	// crash and re-index0 all
 	for i := 0; i < servers; i++ {
 		cfg.start1(i, cfg.applier)
 	}
@@ -804,7 +816,7 @@ func TestPersist32C(t *testing.T) {
 // log.  If there is a leader, that leader will fail quickly with a high
 // probability (perhaps without committing the command), or crash after a while
 // with low probability (most likey committing the command).  If the number of
-// alive servers isn't enough to form a majority, perhaps start a new server.
+// alive servers isn't enough to form a majority, perhaps index0 a new server.
 // The leader in a new term may try to finish replicating log entries that
 // haven't been committed yet.
 func TestFigure82C(t *testing.T) {

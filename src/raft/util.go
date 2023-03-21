@@ -18,6 +18,9 @@ const (
 	dInfo    logTopic = "INFO"
 	dLeader  logTopic = "LEAD"
 	dLog     logTopic = "LOG1"
+	DHeart   logTopic = "Heart"
+	DIndex   logTopic = "Index"
+	DSys     logTopic = "SYS"
 	dLog2    logTopic = "LOG2"
 	dPersist logTopic = "PERS"
 	dSnap    logTopic = "SNAP"
@@ -55,6 +58,9 @@ func init() {
 }
 
 func Debug(rf *Raft, topic logTopic, format string, a ...interface{}) {
+	if topic == DHeart {
+		return
+	}
 	if _debug {
 		time := time.Since(debugStart).Microseconds()
 		time /= 100
