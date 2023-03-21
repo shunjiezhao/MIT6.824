@@ -2,13 +2,13 @@ package raft
 
 import (
 	"fmt"
-	"log"
+	logP "log"
 	"os"
 	"strconv"
 	"time"
 )
 
-type logTopic string
+type logPTopic string
 
 const (
 	dClient  logTopic = "CLNT"
@@ -33,7 +33,7 @@ const (
 )
 
 // Debugging
-var _debug = false
+var _debug = true
 
 var debugStart time.Time
 var debugVerbosity int
@@ -46,7 +46,7 @@ func getVerbosity() int {
 		var err error
 		level, err = strconv.Atoi(v)
 		if err != nil {
-			log.Fatalf("Invalid verbosity %v", v)
+			logP.Fatalf("Invalid verbosity %v", v)
 		}
 	}
 	return level
@@ -54,30 +54,27 @@ func getVerbosity() int {
 func init() {
 	debugVerbosity = getVerbosity()
 	debugStart = time.Now()
-	log.SetFlags(log.Flags() &^ (log.Ldate | log.Ltime))
+	logP.SetFlags(logP.Flags() &^ (logP.Ldate | logP.Ltime))
 }
 
 func Debug(rf *Raft, topic logTopic, format string, a ...interface{}) {
-	if topic == DHeart {
-		return
-	}
 	if _debug {
 		time := time.Since(debugStart).Microseconds()
 		time /= 100
 		prefix := fmt.Sprintf("%06d %v ", time, string(topic))
 		format = prefix + format
 		if rf == nil || rf.killed() == false {
-			log.Printf(format, a...)
+			logP.Printf(format, a...)
 		}
 	}
 }
-func DebugT(t time.Time, topic logTopic, format string, a ...interface{}) {
+func DebugT(t time.Time, topic logPTopic, format string, a ...interface{}) {
 	if _debug {
 		time := t.Sub(debugStart).Microseconds()
 		time /= 100
 		prefix := fmt.Sprintf("%06d %v ", time, string(topic))
 		format = prefix + format
-		log.Printf(format, a...)
+		logP.Printf(format, a...)
 	}
 }
 

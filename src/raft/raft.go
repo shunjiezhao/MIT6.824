@@ -12,12 +12,13 @@ package raft
 // rf.GetState() (term, isLeader)
 //   ask a Raft for its current term, and whether it thinks it is leader
 // ApplyMsg
-//   each time a new entry is committed to the log, each Raft peer
+//   each time a new entry is committed to the LogEntry, each Raft peer
 //   should send an ApplyMsg to the service (or tester)
 //   in the same server.
 //
 
 import (
+	"fmt"
 	//	"bytes"
 	"math/rand"
 	"runtime"
@@ -29,11 +30,11 @@ import (
 	"6.5840/labrpc"
 )
 
-// as each Raft peer becomes aware that successive log entries are
+// as each Raft peer becomes aware that successive LogEntry entries are
 // committed, the peer should send an ApplyMsg to the service (or
 // tester) on the same server, via the applyCh passed to Make(). set
 // CommandValid to true to indicate that the ApplyMsg contains a newly
-// committed log entry.
+// committed LogEntry entry.
 //
 // in part 2D you'll want to send other kinds of messages (e.g.,
 // snapshots) on the applyCh, but set CommandValid to false for these
@@ -55,7 +56,7 @@ type Raft struct {
 	mu        sync.Mutex          // Lock to protect shared access to this peer's state
 	peers     []*labrpc.ClientEnd // RPC end points of all peers
 	persister *Persister          // Object to hold this peer's persisted state
-	me        int                 // this peer's index into peers[]
+	me        int                 // this peer's nextLogIndex into peers[]
 	dead      int32               // set by Kill()
 
 	// Your data here (2A, 2B, 2C).
@@ -64,9 +65,10 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
-	//latest term server has seen (initialized to 0  on first boot, increases monotonically)
+	applyCh chan ApplyMsg
+	//latest Term server has seen (initialized to 0  on first boot, increases monotonically)
 	currentTerm int
-	// votedFor candidateId that received vote in current term (or null if none)
+	// votedFor candidateId that received vote in current Term (or null if none)
 	votedFor     int
 	state        state
 	electionTime time.Time
@@ -82,8 +84,13 @@ type Raft struct {
 
 	name    string // for debug
 	applyCh chan ApplyMsg
-}
+
+
 type state uint8
+type LogEntry struct {
+	Term    int
+	Command interface{}
+}
 
 const (
 	Follower = iota
@@ -157,13 +164,14 @@ func (rf *Raft) readPersist(data []byte) {
 }
 
 // the service says it has created a snapshot that has
-// all info up to and including index. this means the
-// service no longer needs the log through (and including)
-// that index. Raft should now trim its log as much as possible.
+// all info up to and including nextLogIndex. this means the
+// service no longer needs the LogEntry through (and including)
+// that nextLogIndex. Raft should now trim its LogEntry as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	// Your code here (2D).
 
 }
+
 
 // 必须持有锁
 func (rf *Raft) curTermLowL(term int) bool {
@@ -176,7 +184,7 @@ func (rf *Raft) curTermLowL(term int) bool {
 }
 
 // example code to send a RequestVote RPC to a server.
-// server is the index of the target server in rf.peers[].
+// server is the nextLogIndex of the target server in rf.peers[].
 // expects RPC arguments in args.
 // fills in *reply with RPC reply, so caller should
 // pass &reply.
@@ -215,9 +223,9 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 // may fail or lose an electionL. even if the Raft instance has been killed,
 // this function should return gracefully.
 //
-// the first return value is the index that the command will appear at
+// the first return value is the nextLogIndex that the Command will appear at
 // if it's ever committed. the second return value is the current
-// term. the third return value is true if this server believes it is
+// Term. the third return value is true if this server believes it is
 // the leader.
 func (rf *Raft) Start(command interface{}) (index int, term int, isLeader bool) {
 	rf.mu.Lock()
@@ -330,10 +338,16 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		rf.matchIndex = mkSlice(len(rf.peers), 1)
 	}
 	// Your initialization code here (2A, 2B, 2C).
+	rf.name = getServerName(rf.me)
 	rf.votedFor = -1
 	rf.state = Follower
 	rf.currentTerm = 0
 	rf.refreshElectionTime()
+	rf.applyCh = applyCh
+	rf.logs = make([]LogEntry, 1, 1) // len = 1, cap = 1
+	rf.nextLogIndex = 1
+	rf.commitIndex = 0
+	rf.logCond = sync.NewCond(&sync.Mutex{})
 
 	//rf.timeTicker = time.NewTicker(getRandTime())
 	// initialize from state persisted before a crash
@@ -352,10 +366,8 @@ func (rf *Raft) appendEntries(server int, args *AppendEntriesArgs, reply *Append
 	return ok
 }
 
-func assert(test bool) {
-	if test {
-		panic("")
-	}
+func (rf *Raft) getCurLogIndex() int {
+	return len(rf.logs) - 1
 }
 func panicIf(test bool, str string) {
 	if test {
@@ -434,4 +446,63 @@ func (rf *Raft) shouldApplyL() bool {
 
 func (rf *Raft) signLogEnter() {
 	rf.logCond.Broadcast()
+}
+
+func (rf *Raft) apply() {
+	for {
+		rf.logCond.L.Lock()
+		rf.mu.Lock()
+		assert(rf.commitIndex < rf.nextLogIndex, fmt.Sprintf("commit[%v] > next insert LogEntry index[%v]", rf.commitIndex, rf.nextLogIndex))
+		for rf.commitIndex < rf.nextLogIndex-1 {
+			// 还有活干 [commit, nextIndex]
+			rf.mu.Unlock()
+			rf.logCond.Wait()
+			rf.mu.Lock()
+		}
+		for i := rf.commitIndex + 1; i < rf.nextLogIndex; i++ {
+
+			msg := ApplyMsg{
+				CommandValid: rf.logs[i].Term == rf.currentTerm,
+				Command:      rf.logs[i].Command,
+				CommandIndex: i,
+			}
+			go func() {
+				rf.applyCh <- msg
+			}()
+			Debug(rf, dInfo, "msg: %v", msg)
+		}
+		rf.commitIndex = rf.nextLogIndex - 1
+		rf.mu.Unlock()
+		rf.logCond.L.Unlock()
+	}
+}
+
+// 该条目的任期在 prevLogIndex 上能和 prevLogTerm 匹配上
+func (rf *Raft) MatchPrevLogs(args *AppendEntriesArgs) bool {
+	return args.PrevLogIndex < rf.nextLogIndex && rf.logs[args.PrevLogIndex].Term == args.PrevLogTerm
+}
+
+func (rf *Raft) appendLog(l LogEntry) {
+	index := rf.nextLogIndex
+	if len(rf.logs) > index {
+		rf.logs[index] = l
+	} else {
+		rf.logs = append(rf.logs, l)
+	}
+	rf.nextLogIndex++
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+func panicIf(test bool, str string) {
+	if test {
+		panic(str)
+	}
+}
+func assert(test bool, str string) {
+	panicIf(!test, str)
 }
