@@ -79,8 +79,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			Debug(rf, dWarn, "%s cut log entry", rf.name)
 			prevL := rf.log.lastLogIndex()
 			rf.log.cut2end(index - 1) // 可能被覆盖
-			rf.commitIndex = min(rf.commitIndex, rf.log.lastLogIndex())
-			rf.lastApplied = min(rf.lastApplied, rf.commitIndex)
+			if rf.commitIndex < rf.log.lastLogIndex() {
+				rf.updCmtIdxALastAppliedL(rf.log.lastLogIndex())
+			}
 			panicIf(prevL == rf.log.lastLogIndex(), "")
 			rf.AppendLogL(entry)
 		} else {
@@ -91,7 +92,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	if args.LeaderCommit > rf.commitIndex {
 		// 如果领导人的已知已提交的最高日志条目的索引大于接收者的已知已提交最高日志条目的索引（leaderCommit > commitIndex），
-		rf.commitIndex = min(args.LeaderCommit, args.PrevLogIndex+len(args.Entries))
+		rf.updCmtIdxALastAppliedL(min(args.LeaderCommit, args.PrevLogIndex+len(args.Entries)))
 		// 则把接收者的已知已经提交的最高的日志条目的索引commitIndex 重置为 领导人的已知已经提交的最高的日志条目的索引 leaderCommit 或者是 上一个新条目的索引 取两者的最小值
 	}
 	Debug(rf, dCommit, "%s <- [%s] update commit Index: %d -> %d", rf.name, getServerName(args.LeaderId), prev, rf.commitIndex)
@@ -142,7 +143,7 @@ func (rf *Raft) AppendMsgL(heart bool) {
 			continue
 		}
 		var log []LogEntry
-		if rf.nextIndex[i] <= rf.log.lastLogIndex() {
+		if rf.nextIndex[i] <= rf.log.lastLogIndex() && heart == false {
 			Debug(rf, dLog, "%s send log to %s [%d: %d]", rf.name, getServerName(i), rf.nextIndex[i], rf.log.lastLogIndex())
 			log = rf.log.cloneRange(rf.nextIndex[i], rf.log.lastLogIndex())
 		} else if heart == false {
@@ -195,6 +196,8 @@ func (rf *Raft) procAppendReplyL(idx int, args *AppendEntriesArgs, reply *Append
 
 	rf.updateCommitIndexL()
 }
+
+// 更新commitIndex
 func (rf *Raft) updateCommitIndexL() {
 	panicIf(rf.state != Leader, "")
 	prev := rf.commitIndex // for debug

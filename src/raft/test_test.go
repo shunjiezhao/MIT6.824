@@ -588,6 +588,7 @@ func TestCount2B(t *testing.T) {
 	rpcs := func() (n int) {
 		for j := 0; j < servers; j++ {
 			n += cfg.rpcCount(j)
+			println(j, n)
 		}
 		return
 	}

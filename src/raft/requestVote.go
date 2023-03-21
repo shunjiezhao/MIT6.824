@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -84,7 +85,7 @@ func (rf *Raft) SendVoteRequestL() {
 		wg.Wait()
 		rf.mu.Lock()
 		if rf.state == Candidate {
-			rf.electionTime = time.Now() // 再次选举
+			rf.electionTime = time.Now().Add(getRandTime()) // 再次选举
 			Debug(rf, dWarn, "%s 选举失败 retry selection", rf.Name())
 		}
 		rf.mu.Unlock()
@@ -135,6 +136,12 @@ func (rf *Raft) compareLogL(args *RequestVoteArgs) bool {
 	// term 相等比较
 	return args.LastLogIndex >= lastIndex
 }
+
+func (rf *Raft) updCmtIdxALastAppliedL(index int) {
+	rf.commitIndex = index
+	rf.lastApplied = min(rf.lastApplied, rf.commitIndex)
+}
+
 func max(a, b int) int {
 	return -min(-a, -b)
 }
@@ -143,4 +150,9 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func getRandTime() time.Duration {
+	source := rand.NewSource(time.Now().Unix())
+	return time.Duration(source.Int63())
 }

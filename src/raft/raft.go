@@ -89,8 +89,8 @@ const (
 	Follower = iota
 	Candidate
 	Leader
-	heartTime    = time.Microsecond * 300
-	heartTimeOut = time.Second
+	heartTime    = time.Second
+	heartTimeOut = time.Second * 3
 )
 
 func (s state) String() string {
@@ -423,6 +423,7 @@ func (rf *Raft) apply() {
 func (rf *Raft) shouldApplyL() bool {
 	panicIf(rf.lastApplied > rf.commitIndex, "")
 	if rf.lastApplied >= rf.commitIndex { // 当提交的都已经被应用了
+		//rf.lastApplied = rf.commitIndex // 可能commit index 更新了
 		return false
 	}
 	// start and last index
