@@ -2,8 +2,8 @@ package raft
 
 type (
 	Log struct {
-		logs   []LogEntry
-		index0 int
+		Logs  []LogEntry
+		Start int
 	}
 	LogEntry struct {
 		Term    int
@@ -12,37 +12,41 @@ type (
 )
 
 func (l *Log) start() int {
-	return l.index0 + 1
+	return l.Start + 1
 }
 func (l *Log) append(e LogEntry) {
-	l.logs = append(l.logs, e)
+	l.Logs = append(l.Logs, e)
 }
 func (l *Log) entryAt(i int) LogEntry {
-	return l.logs[i-l.index0]
+	return l.Logs[i-l.Start]
 }
 func (l *Log) lastLogIndex() int {
-	return len(l.logs) - 1
+	return len(l.Logs) - 1
 }
+func (l *Log) lastLog() LogEntry {
+	return l.entryAt(l.lastLogIndex())
+}
+
 func (l *Log) nextLogIndex() int {
-	return len(l.logs)
+	return len(l.Logs)
 }
 func mkLog() Log {
-	log := Log{logs: make([]LogEntry, 1), index0: 0}
-	log.logs[0] = LogEntry{Term: 0}
+	log := Log{Logs: make([]LogEntry, 1), Start: 0}
+	log.Logs[0] = LogEntry{Term: 0}
 	return log
 }
 
-// return logs[x:y]
+// return Logs[x:y]
 func (l *Log) cloneRange(x, y int) []LogEntry {
 	if x > y {
 		return nil
 	}
 	cone := make([]LogEntry, y-x+1)
-	copy(cone, l.logs[x:y+1])
+	copy(cone, l.Logs[x:y+1])
 	return cone
 }
 
 // delete x + 1 -> end
 func (l *Log) cut2end(x int) {
-	l.logs = l.cloneRange(0, x)
+	l.Logs = l.cloneRange(0, x)
 }
