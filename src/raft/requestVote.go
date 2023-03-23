@@ -154,5 +154,5 @@ func min(a, b int) int {
 
 func getRandTime() time.Duration {
 	source := rand.NewSource(time.Now().Unix())
-	return time.Duration(source.Int63())
+	return time.Duration(source.Int63() % 300)
 }
