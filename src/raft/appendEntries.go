@@ -24,6 +24,11 @@ type AppendEntriesReply struct {
 	// Your data here (2A).
 	Term    int  // CurrentTerm, for leader to update itself
 	Success bool // true if follower contained entry matching prevLogIndex and prevLogTerm
+
+	// optimize log copy when log don't match
+	XTerm  int // conflict term
+	XIndex int // conflict index
+	XLen   int // conflict len
 }
 
 func (rf *Raft) printAppendReplyLog(args *AppendEntriesArgs) {
@@ -31,7 +36,7 @@ func (rf *Raft) printAppendReplyLog(args *AppendEntriesArgs) {
 	if juegeHeart(args.Entries) {
 		ty = DHeart
 	}
-	Debug(rf, ty, "%s[%s]<- %s [term: %d]: %v ", rf.Name(), rf.State(), getServerName(args.LeaderId), args.Term, args)
+	Debug(rf, ty, "%s[%s:%d]<- %s [term: %d]: %v ", rf.Name(), rf.State(), rf.CurrentTerm, getServerName(args.LeaderId), args.Term, args)
 }
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	var prev = 0 // debug
@@ -39,15 +44,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// Your code here (2A, 2B).
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	reply.Term = rf.CurrentTerm
 
 	rf.printAppendReplyLog(args)
-	// 所有服务器遵守的规则
-	if rf.curTermLowL(args.Term) {
-		return
-	}
 
 	if rf.CurrentTerm > args.Term { // rule 1
+		reply.Term = rf.CurrentTerm
 		Debug(rf, dWarn, "%s found leader %s 过期", rf.Name(), getServerName(args.LeaderId))
 		reply.Success = false
 		//如果一个节点接收了一个带着过期的任期号的请求，那么它会拒绝这次请求。
@@ -55,11 +56,31 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		return
 	}
 
+	// 所有服务器遵守的规则
+	if args.Term > rf.CurrentTerm {
+		rf.termLowL(args.Term)
+
+	}
+
+	reply.Term = rf.CurrentTerm
+	rf.refreshElectionTime() // 当前term的合法leader
+
 	//返回假 如果接收者日志中没有包含这样一个条目 即该条目的任期在 prevLogIndex 上能和 prevLogTerm 匹配上
 	//（译者注：在接收者日志中 如果能找到一个和 prevLogIndex 以及 prevLogTerm 一样的索引和任期的日志条目 则继续执行下面的步骤 否则返回假）
-	if rf.Log.lastLogIndex() < args.PrevLogIndex || rf.Log.entryAt(args.PrevLogIndex).Term != args.PrevLogTerm {
+	if rf.Log.lastLogIndex() < args.PrevLogIndex {
+		// 说明 太短
 		reply.Success = false
-		Debug(rf, dWarn, "%s <- %s 传递的日志不连续", rf.name, getServerName(args.LeaderId))
+		reply.XLen = len(rf.Log.Logs)
+		Debug(rf, dWarn, "%s <- %s 传递的日志不连续 设置 Xlen: %d", rf.name, getServerName(args.LeaderId), reply.XLen)
+		return
+	}
+
+	prevLogTerm := rf.Log.entryAt(args.PrevLogIndex).Term
+	if prevLogTerm != args.PrevLogTerm {
+		reply.XTerm = prevLogTerm
+		reply.XIndex = rf.Log.search(prevLogTerm)
+		reply.Success = false
+		Debug(rf, dWarn, "%s <- %s 传递的日志不连续 Xindex: %d Xterm: %d", rf.name, getServerName(args.LeaderId), reply.XIndex, reply.XTerm)
 		return
 	}
 
@@ -68,7 +89,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	for i, entry := range args.Entries {
 		index := args.PrevLogIndex + i + 1 //next
 		if rf.Log.lastLogIndex() < index {
-			Debug(rf, dLog, "%s append %d Log entry %v", rf.name, index, entry)
+			panicIf(rf.Log.lastLogIndex()+1 != index, "不连续")
+			Debug(rf, dLog, "%s append %d Log entry %+v", rf.name, index, entry)
 			rf.AppendLogL(entry) // 追加日志中尚未存在的任何新条目
 
 			continue
@@ -76,14 +98,17 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 		// index < last index 所以冲突
 		if rf.Log.entryAt(index).Term != entry.Term {
-			Debug(rf, dWarn, "%s cut Log entry", rf.name)
+			Debug(rf, dWarn, "%s cut Log entry [0, %d]", rf.name, index-1)
 			prevL := rf.Log.lastLogIndex()
 			rf.Log.cut2end(index - 1) // 可能被覆盖
-			if rf.commitIndex < rf.Log.lastLogIndex() {
+			panicIf(rf.Log.lastLogIndex() != index-1, "cut error")
+			if rf.commitIndex > rf.Log.lastLogIndex() { // fix < with >
 				rf.updCmtIdxALastAppliedL(rf.Log.lastLogIndex())
 			}
 			panicIf(prevL == rf.Log.lastLogIndex(), "")
+			panicIf(rf.Log.lastLogIndex() == index, "rf Log not cut")
 			rf.AppendLogL(entry)
+			Debug(rf, dLog, "%s append %d Log entry %+v", rf.name, index, entry)
 		} else {
 			continue // term 相等 并且 index 相等
 		}
@@ -99,17 +124,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	//如果这个 leader 的任期号（这个任期号会在这次 RPC 中携带着）不小于这个 candidate 的当前任期号，那么这个 candidate 就会觉得这个 leader 是合法的，然后将自己转变为 follower 状态。
 	// 当前任期 curTerm = args.Term
 
-	if rf.state != Follower || len(args.Entries) != 0 {
-		//TODO: persist
-		rf.persist()
-	}
 	rf.state = Follower
-
-	rf.refreshElectionTime() // 更新心跳时间
+	rf.persist()
 	reply.Success = true
-	if rf.shouldApplyL() {
-		rf.signLogEnter()
-	}
+	rf.signLogEnter()
 	return
 }
 
@@ -139,6 +157,15 @@ func (rf *Raft) appendMsg(idx int, args *AppendEntriesArgs) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	if rf.curTermLowL(reply.Term) {
+		// 如果一个 candidate 或者 leader 发现自己的任期号过期了，它就会立刻回到 follower 状态。
+		return
+	}
+
+	if args.Term != rf.CurrentTerm {
+		return
+	}
+
 	if rf.state == Leader {
 		rf.procAppendReplyL(idx, args, &reply)
 	}
@@ -149,11 +176,12 @@ func (rf *Raft) AppendMsgL(heart bool) {
 			continue
 		}
 		var log []LogEntry
-		if rf.nextIndex[i] <= rf.Log.lastLogIndex() && heart == false {
-			Debug(rf, dLog, "%s send Log to %s [%d: %d]", rf.name, getServerName(i), rf.nextIndex[i], rf.Log.lastLogIndex())
-			log = rf.Log.cloneRange(rf.nextIndex[i], rf.Log.lastLogIndex())
-		} else if heart == false {
-			continue // 没有日志可以发送
+
+		if !heart {
+			if rf.nextIndex[i] <= rf.Log.lastLogIndex() {
+				Debug(rf, dLog, "%s send Log to %s [%d: %d]", rf.name, getServerName(i), rf.nextIndex[i], rf.Log.lastLogIndex())
+				log = rf.Log.cloneRange(rf.nextIndex[i], rf.Log.lastLogIndex())
+			}
 		}
 
 		rf.SendLogLG(i, log)
@@ -180,23 +208,27 @@ func (rf *Raft) SendLogLG(idx int, entries []LogEntry) {
 func (rf *Raft) procAppendReplyL(idx int, args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	panicIf(rf.state != Leader, "")
 
-	if rf.curTermLowL(reply.Term) {
-		// 如果一个 candidate 或者 leader 发现自己的任期号过期了，它就会立刻回到 follower 状态。
-		return
-	}
-
-	if args.Term != rf.CurrentTerm {
-		return
-	}
-
 	if reply.Success {
 		// 如果成功：更新相应跟随者的 nextIndex 和 matchIndex
 		rf.nextIndex[idx] = max(args.PrevLogIndex+len(args.Entries)+1, rf.nextIndex[idx])
 		rf.matchIndex[idx] = max(args.PrevLogIndex+len(args.Entries), rf.matchIndex[idx])
 		Debug(rf, DIndex, "%s update %s next: %d match: %d", rf.Name(), getServerName(idx), rf.nextIndex[idx], rf.matchIndex[idx])
 	} else {
-		Debug(rf, dWarn, "%s retry to send Log to %s", rf.name, getServerName(idx))
-		rf.nextIndex[idx] = max(1, rf.nextIndex[idx]-1)                                // 如果因为日志不一致而失败，则 nextIndex 递减并重试
+		prev := rf.nextIndex[idx]
+		if reply.XLen != 0 {
+			rf.nextIndex[idx] = reply.XLen
+			Debug(rf, dWarn, "%s 1: retry to send Log to %s( udpate next index %d -> %d", rf.name, getServerName(idx), prev, rf.nextIndex[idx])
+		} else {
+			if rf.Log.contain(reply.XTerm) {
+				rf.nextIndex[idx] = rf.Log.TermLastIndex(reply.XTerm)
+				Debug(rf, dWarn, "%s 2: retry to send Log to %s( udpate next index %d -> %d", rf.name, getServerName(idx), prev, rf.nextIndex[idx])
+			} else {
+				rf.nextIndex[idx] = reply.XIndex
+				Debug(rf, dWarn, "%s 3: retry to send Log to %s( udpate next index %d -> %d", rf.name, getServerName(idx), prev, rf.nextIndex[idx])
+			}
+		}
+		rf.nextIndex[idx] = max(rf.nextIndex[idx], 1)
+
 		rf.SendLogLG(idx, rf.Log.cloneRange(rf.nextIndex[idx], rf.Log.lastLogIndex())) //
 	}
 

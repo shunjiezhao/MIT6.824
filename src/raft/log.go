@@ -1,5 +1,9 @@
 package raft
 
+import (
+	"sort"
+)
+
 type (
 	Log struct {
 		Logs  []LogEntry
@@ -49,4 +53,35 @@ func (l *Log) cloneRange(x, y int) []LogEntry {
 // delete x + 1 -> end
 func (l *Log) cut2end(x int) {
 	l.Logs = l.cloneRange(0, x)
+}
+
+// return the first index >= term
+func (l *Log) search(term int) int {
+	panicIf(term < 0, "term is negative")
+	idx := sort.Search(len(l.Logs), func(i int) bool {
+		return l.Logs[i].Term >= term
+	})
+	if idx == len(l.Logs) || l.entryAt(idx).Term != term {
+		return -1
+	}
+	return idx
+}
+
+func (l *Log) TermLastIndex(term int) int {
+	panicIf(l.contain(term) == false, "log don't contain this term")
+	panicIf(term < 0, "term is negative")
+	idx := sort.Search(len(l.Logs), func(i int) bool {
+		return l.Logs[i].Term > term
+	}) - 1
+	panicIf(l.entryAt(idx).Term != term, "leader should have this term")
+	return idx
+}
+
+// return the first index >= term
+func (l *Log) contain(term int) bool {
+	idx := l.search(term)
+	if idx == -1 {
+		return false
+	}
+	return l.entryAt(idx).Term == term
 }

@@ -94,7 +94,7 @@ const (
 	Candidate
 	Leader
 	heartTime    = time.Millisecond * 200
-	heartTimeOut = time.Second * 2
+	heartTimeOut = time.Second
 )
 
 func (s state) String() string {
@@ -147,7 +147,7 @@ func (rf *Raft) persist() {
 
 	raftstate := w.Bytes()
 	rf.persister.Save(raftstate, nil)
-	Debug(rf, dTest, "%s persist success!", rf.name)
+	Debug(rf, dPersist, "%s persist success!", rf.name)
 }
 
 // restore previously persisted state.
@@ -260,6 +260,7 @@ func (rf *Raft) Start(command interface{}) (index int, term int, isLeader bool) 
 	index = rf.Log.nextLogIndex()
 	panicIf(index != rf.Log.lastLogIndex()+1, "")
 	rf.AppendLogL(entry)
+	rf.persist()
 	rf.AppendMsgL(false)
 	// Your code here (2B).
 	Debug(rf, DSys, "%s start command", rf.name)
@@ -268,7 +269,6 @@ func (rf *Raft) Start(command interface{}) (index int, term int, isLeader bool) 
 func (rf *Raft) AppendLogL(log LogEntry) {
 	// 做一个 广播， 并且呢通知自己 有东西到来
 	rf.Log.append(log)
-	rf.persist()
 }
 
 // the tester doesn't halt goroutines created by Raft after each test,
@@ -304,8 +304,8 @@ func (rf *Raft) ticker() {
 		// Check if a leader electionL should be started.
 		rf.mu.Lock()
 		if rf.state == Leader {
-
-			rf.AppendMsgL(true)
+			rf.refreshElectionTime()
+			rf.AppendMsgL(false)
 			rf.mu.Unlock()
 			time.Sleep(heartTime)
 			continue
@@ -317,7 +317,7 @@ func (rf *Raft) ticker() {
 		rf.mu.Unlock()
 		// pause for a random amount of time between 50 and 350
 		// milliseconds.
-		ms := 200 + (rand.Int63() % 100)
+		ms := 50 + (rand.Int63() % 300)
 		time.Sleep(time.Duration(ms) * time.Millisecond)
 	}
 }
@@ -360,6 +360,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.state = Follower
 	rf.CurrentTerm = 0
 	rf.refreshElectionTime()
+	rf.lastApplied = 0
 
 	//rf.timeTicker = time.NewTicker(getRandTime())
 	// initialize from state persisted before a crash
@@ -399,7 +400,7 @@ func (rf *Raft) electionL() {
 }
 
 func (rf *Raft) refreshElectionTime() {
-	rf.electionTime = time.Now().Add(heartTimeOut)
+	rf.electionTime = time.Now().Add(heartTimeOut + time.Duration(rand.Int63()%int64(heartTimeOut)))
 }
 func mkSlice(n int, i int) []int {
 	var ans = make([]int, n)
@@ -426,13 +427,13 @@ func (rf *Raft) freshNextSliceL() {
 }
 
 func (rf *Raft) apply() {
-	rf.mu.Lock()
-	rf.lastApplied = 0
 
 	for rf.killed() == false {
+		rf.mu.Lock()
 		for rf.shouldApplyL() == false {
 			rf.logCond.Wait()
 		}
+		panicIf(rf.shouldApplyL() == false, "")
 
 		rf.lastApplied++ // 防止重复更新
 		msg := ApplyMsg{
@@ -440,11 +441,11 @@ func (rf *Raft) apply() {
 			Command:      rf.Log.entryAt(rf.lastApplied).Command,
 			CommandIndex: rf.lastApplied,
 		}
+		Debug(rf, dClient, "%s want to apply idx %d Log %+v", rf.name, rf.lastApplied, rf.Log.entryAt(rf.lastApplied))
+		Debug(rf, dLog, "%s apply idx %d msg", rf.Name(), rf.lastApplied)
 		rf.mu.Unlock()
 		rf.applyCh <- msg
 
-		rf.mu.Lock()
-		Debug(rf, dLog, "%s apply idx %d msg", rf.Name(), rf.lastApplied)
 	}
 }
 

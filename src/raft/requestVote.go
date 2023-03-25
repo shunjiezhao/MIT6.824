@@ -1,9 +1,7 @@
 package raft
 
 import (
-	"math/rand"
 	"sync"
-	"time"
 )
 
 // RequestVoteArgs example RequestVote RPC arguments structure.
@@ -33,15 +31,17 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	curTerm := rf.CurrentTerm
-	reply.Term = curTerm
-	//如果term < currentTerm返回 false
-	if curTerm > args.Term { // 过时
-		return
-	}
+
 	// 所有的服务器都 适用
 	if rf.curTermLowL(args.Term) {
 		Debug(rf, dError, "%s 过期", rf.Name())
+	}
+	curTerm := rf.CurrentTerm
+
+	reply.Term = rf.CurrentTerm
+	//如果term < currentTerm返回 false
+	if curTerm > args.Term { // 过时
+		return
 	}
 
 	//这轮 已经投过别人了
@@ -59,12 +59,12 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	Debug(rf, dVote, "%s[%s,%d] 投票给  %s[%d]", rf.Name(), rf.State(), rf.CurrentTerm, getServerName(args.CandidateId),
 		args.Term)
 
-	rf.VotedFor = args.CandidateId
-	rf.state = Candidate
-	//TODO: need to  persist
-	rf.persist()
 	reply.VoteGranted = true
 	rf.refreshElectionTime()
+	//TODO: need to  persist
+	rf.VotedFor = args.CandidateId
+	rf.state = Candidate
+	rf.persist()
 	return
 }
 
@@ -88,11 +88,11 @@ func (rf *Raft) SendVoteRequestL() {
 	go func() {
 		wg.Wait()
 		rf.mu.Lock()
+		defer rf.mu.Unlock()
 		if rf.state == Candidate {
-			rf.electionTime = time.Now().Add(getRandTime()) // 再次选举
+			rf.refreshElectionTime() // 再次选举
 			Debug(rf, dWarn, "%s 选举失败 retry selection", rf.Name())
 		}
-		rf.mu.Unlock()
 	}()
 }
 func (rf *Raft) sendVoteRequest(wg *sync.WaitGroup, count *int, other int, args *RequestVoteArgs) {
@@ -109,11 +109,15 @@ func (rf *Raft) sendVoteRequest(wg *sync.WaitGroup, count *int, other int, args 
 	if rf.curTermLowL(reply.Term) {
 		return // 过时立即转变 + 返回
 	} else {
+		if args.Term != rf.CurrentTerm {
+			return
+		}
+
 		if reply.VoteGranted == false {
-			Debug(rf, dError, "%s is 没有获取到 %s 票", rf.Name(), getServerName(other))
+			Debug(rf, dError, "%s[%d] is 没有获取到 %s[%d] 票", rf.Name(), args.Term, getServerName(other), reply.Term)
 		} else {
-			Debug(rf, dVote, "%s is 获取到 %s 票 count:%v", rf.Name(), getServerName(other), *count)
 			*count++
+			Debug(rf, dVote, "%s[%d:%s] is 获取到 %s[%d:] 票 count:%v", rf.Name(), args.Term, rf.state, getServerName(other), reply.Term, *count)
 			if *count > len(rf.peers)/2 && rf.state == Candidate {
 				rf.becomeLeaderThenDoL()
 			}
@@ -134,13 +138,10 @@ func (rf *Raft) becomeLeaderThenDoL() {
 // 返回true 代表可以给他投票
 func (rf *Raft) compareLogL(args *RequestVoteArgs) bool {
 	// 日志条目的比较
-
 	lastIndex := rf.Log.lastLogIndex()
-	if args.LastLogTerm > rf.Log.entryAt(lastIndex).Term {
-		return true
-	}
-	if args.LastLogTerm < rf.Log.entryAt(lastIndex).Term {
-		return false
+	lastTerm := rf.Log.entryAt(lastIndex).Term
+	if args.LastLogTerm != lastTerm {
+		return args.LastLogTerm > lastTerm
 	}
 
 	// term 相等比较
@@ -160,9 +161,4 @@ func min(a, b int) int {
 		return a
 	}
 	return b
-}
-
-func getRandTime() time.Duration {
-	source := rand.NewSource(time.Now().Unix())
-	return time.Duration(source.Int63() % 300)
 }
