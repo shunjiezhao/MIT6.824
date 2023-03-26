@@ -8,11 +8,13 @@ package raft
 // test with the original before submitting.
 //
 
-import "testing"
+import (
+	"sync/atomic"
+	"testing"
+)
 import "fmt"
 import "time"
 import "math/rand"
-import "sync/atomic"
 import "sync"
 
 // The tester generously allows solutions to complete elections in one second
@@ -915,6 +917,7 @@ func TestFigure8Unreliable2C(t *testing.T) {
 
 	nup := servers
 	for iters := 0; iters < 1000; iters++ {
+		Debug(nil, DSys, "iter: %d", iters)
 		if iters == 200 {
 			cfg.setlongreordering(true)
 		}
