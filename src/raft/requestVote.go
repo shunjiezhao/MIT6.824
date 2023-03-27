@@ -34,7 +34,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	// 所有的服务器都 适用
 	if rf.curTermLowL(args.Term) {
-		Debug(rf, dError, "%s 过期", rf.Name())
+		Debug(rf, dError, "过期")
 	}
 	curTerm := rf.CurrentTerm
 
@@ -49,14 +49,14 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		return
 	}
 
-	Debug(rf, dVote, "%s Compare Last[%+v] %s Last[term: %d, index: %d] ans: %v", rf.name, rf.Log.lastLog(), getServerName(args.CandidateId),
+	Debug(rf, dVote, "Compare Last[%+v] %s Last[term: %d, index: %d] ans: %v", rf.Log.lastLog(), getServerName(args.CandidateId),
 		args.LastLogTerm, args.LastLogIndex, rf.compareLogL(args))
 
 	if rf.compareLogL(args) == false {
 		return
 	}
 
-	Debug(rf, dVote, "%s[%s,%d] 投票给  %s[%d]", rf.Name(), rf.State(), rf.CurrentTerm, getServerName(args.CandidateId),
+	Debug(rf, dVote, "[%s,%d] 投票给  %s[%d]", rf.State(), rf.CurrentTerm, getServerName(args.CandidateId),
 		args.Term)
 
 	reply.VoteGranted = true
@@ -91,7 +91,7 @@ func (rf *Raft) SendVoteRequestL() {
 		defer rf.mu.Unlock()
 		if rf.state == Candidate {
 			rf.refreshElectionTime() // 再次选举
-			Debug(rf, dWarn, "%s 选举失败 retry selection", rf.Name())
+			Debug(rf, dWarn, "选举失败 retry selection")
 		}
 	}()
 }
@@ -100,7 +100,7 @@ func (rf *Raft) sendVoteRequest(wg *sync.WaitGroup, count *int, other int, args 
 	var reply RequestVoteReply
 
 	call := rf.sendRequestVote(other, args, &reply)
-	Debug(rf, dVote, "%s -> % s[call:%t] req: %+ ans: %+v", rf.Name(), getServerName(other), call, args, reply)
+	Debug(rf, dVote, "-> %v [call:%v] req: %+v ans: %+v", getServerName(other), call, args, reply)
 
 	assert(!call && reply.VoteGranted == true)
 
@@ -114,10 +114,10 @@ func (rf *Raft) sendVoteRequest(wg *sync.WaitGroup, count *int, other int, args 
 		}
 
 		if reply.VoteGranted == false {
-			Debug(rf, dError, "%s[%d] is 没有获取到 %s[%d] 票", rf.Name(), args.Term, getServerName(other), reply.Term)
+			Debug(rf, dError, "[%d] is 没有获取到 %s[%d] 票", args.Term, getServerName(other), reply.Term)
 		} else {
 			*count++
-			Debug(rf, dVote, "%s[%d:%s] is 获取到 %s[%d:] 票 count:%v", rf.Name(), args.Term, rf.state, getServerName(other), reply.Term, *count)
+			Debug(rf, dVote, "[%d:%s] is 获取到 %s[%d:] 票 count:%v", args.Term, rf.state, getServerName(other), reply.Term, *count)
 			if *count > len(rf.peers)/2 && rf.state == Candidate {
 				rf.becomeLeaderThenDoL()
 			}
@@ -125,13 +125,12 @@ func (rf *Raft) sendVoteRequest(wg *sync.WaitGroup, count *int, other int, args 
 	}
 }
 func (rf *Raft) becomeLeaderThenDoL() {
-	Debug(rf, dVote, "%s now is leader", rf.Name())
+	Debug(rf, dVote, " now is leader")
 	rf.state = Leader
 	//TODO: need to  persist
 	rf.persist()
-
-	rf.AppendMsgL(true) // 发送心跳
 	rf.freshNextSliceL()
+	rf.AppendMsgL(true) // 发送心跳
 }
 
 // 比较 rpc 请求的日条目是否比自己的新，或者一样新
@@ -149,8 +148,10 @@ func (rf *Raft) compareLogL(args *RequestVoteArgs) bool {
 }
 
 func (rf *Raft) updCmtIdxALastAppliedL(index int) {
-	rf.commitIndex = index
-	rf.lastApplied = min(rf.lastApplied, rf.commitIndex)
+	prevA, prevC := rf.lastApplied, rf.CommitIndex
+	rf.CommitIndex = index
+	rf.lastApplied = min(rf.lastApplied, rf.CommitIndex)
+	Debug(rf, dInfo, "updCmtIdxALastAppliedL: lastApplied: %d -> %d lastCommit: %d -> %d", prevA, rf.lastApplied, prevC, rf.CommitIndex)
 }
 
 func max(a, b int) int {
