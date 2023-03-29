@@ -90,7 +90,7 @@ func (rf *Raft) SendVoteRequestL() {
 		rf.mu.Lock()
 		defer rf.mu.Unlock()
 		if rf.state == Candidate {
-			rf.refreshElectionTime() // 再次选举
+			rf.retryElectionRefresh() // 再次选举
 			Debug(rf, dWarn, "选举失败 retry selection")
 		}
 	}()

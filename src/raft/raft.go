@@ -426,6 +426,9 @@ func (rf *Raft) electionL() {
 func (rf *Raft) refreshElectionTime() {
 	rf.electionTime = time.Now().Add(heartTimeOut + time.Duration(rand.Int63()%int64(heartTimeOut)))
 }
+func (rf *Raft) retryElectionRefresh() {
+	rf.electionTime = time.Now().Add(heartTimeOut/4 + time.Duration(rand.Int63()%int64(heartTimeOut/4)))
+}
 func mkSlice(n int, i int) []int {
 	var ans = make([]int, n)
 	for a, _ := range ans {
@@ -459,16 +462,26 @@ func (rf *Raft) apply() {
 		}
 		panicIf(rf.shouldApplyL() == false, "")
 
-		rf.lastApplied++ // 防止重复更新
-		msg := ApplyMsg{
-			CommandValid: true,
-			Command:      rf.Log.entryAt(rf.lastApplied).Command,
-			CommandIndex: rf.lastApplied,
+		var msg ApplyMsg
+		if rf.lastApplied < rf.LastIncludedIndex {
+			rf.lastApplied = rf.LastIncludedIndex
+			msg.SnapshotIndex = rf.LastIncludedIndex
+			msg.SnapshotTerm = rf.LastIncludedTerm
+			msg.SnapshotValid = true
+			msg.Snapshot = rf.persister.ReadSnapshot()
+
+		} else if rf.lastApplied < rf.CommitIndex {
+
+			rf.lastApplied++ // 防止重复更新
+			msg.CommandValid = true
+			msg.Command = rf.Log.entryAt(rf.lastApplied).Command
+			msg.CommandIndex = rf.lastApplied
+		} else {
+			panic("")
 		}
 		Debug(rf, dClient, "want to apply idx %d Log %+v", rf.lastApplied, rf.Log.entryAt(rf.lastApplied))
 		rf.mu.Unlock()
 		rf.applyCh <- msg
-
 	}
 }
 

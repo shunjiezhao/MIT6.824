@@ -45,14 +45,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotReq, reply *InstallSnapshot
 		rf.Log = mkLog(args.LastIncludedIndex, args.LastIncludedTerm) // 截断
 	}
 	rf.installSnapshotOPL(args.LastIncludedIndex, args.LastIncludedTerm, args.Data)
-
 	// send snapshot to config.go
-	rf.applyCh <- ApplyMsg{
-		SnapshotValid: true,
-		Snapshot:      args.Data,
-		SnapshotTerm:  args.LastIncludedTerm,
-		SnapshotIndex: args.LastIncludedIndex,
-	}
 	Debug(rf, dSnap, "apply snapshot index: %d term: %d success", args.LastIncludedTerm, args.LastIncludedIndex)
 	return
 }
@@ -112,8 +105,9 @@ func (rf *Raft) installSnapshotOPL(lastIncludeIndex, lastIncludeTerm int, snapsh
 	rf.LastIncludedIndex = lastIncludeIndex
 	rf.LastIncludedTerm = lastIncludeTerm
 	rf.CommitIndex = max(lastIncludeIndex, rf.CommitIndex)
-	rf.lastApplied = max(rf.LastIncludedIndex, rf.lastApplied)
+	//rf.lastApplied = max(rf.LastIncludedIndex, rf.lastApplied)
 	rf.persister.Save(rf.getRaftState(), snapshot)
 	Debug(rf, dSnap, "after install snapshot lastlogindex: %d "+
 		"last: %d -> %d commit: %d -> %d", rf.Log.lastLogIndex(), prevA, rf.lastApplied, prevC, rf.CommitIndex)
+	rf.signLogEnter()
 }
