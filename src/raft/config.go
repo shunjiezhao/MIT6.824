@@ -190,9 +190,10 @@ func (cfg *config) ingestSnap(i int, snapshot []byte, index int) string {
 	d := labgob.NewDecoder(r)
 	var lastIncludedIndex int
 	var xlog []interface{}
-	if d.Decode(&lastIncludedIndex) != nil ||
-		d.Decode(&xlog) != nil {
-		log.Fatalf("snapshot decode error")
+	err1 := d.Decode(&lastIncludedIndex)
+	err2 := d.Decode(&xlog)
+	if err1 != nil || err2 != nil {
+		log.Fatalf("snapshot decode error %v %v", err1, err2)
 		return "snapshot Decode() error"
 	}
 	if index != -1 && index != lastIncludedIndex {

@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"fmt"
 	"sort"
 )
 
@@ -12,6 +13,7 @@ type (
 	LogEntry struct {
 		Term    int
 		Command interface{}
+		Index   int
 	}
 )
 
@@ -24,24 +26,47 @@ func (l *Log) append(e LogEntry) {
 func (l *Log) entryAt(i int) LogEntry {
 	return l.Logs[i-l.Start]
 }
+
+func (l *Log) startLog() LogEntry {
+	return l.entryAt(l.start())
+}
 func (l *Log) lastLogIndex() int {
-	return len(l.Logs) - 1
+	return len(l.Logs) - 1 + l.Start
 }
 func (l *Log) lastLog() LogEntry {
 	return l.entryAt(l.lastLogIndex())
 }
 
 func (l *Log) nextLogIndex() int {
-	return len(l.Logs)
+	return len(l.Logs) + l.Start
 }
-func mkLog() Log {
-	log := Log{Logs: make([]LogEntry, 1), Start: 0}
-	log.Logs[0] = LogEntry{Term: 0}
+func mkLog(start int, term int) Log {
+	log := Log{Logs: make([]LogEntry, 1), Start: start}
+	log.Logs[0] = LogEntry{Term: term}
 	return log
+}
+
+// copy [start + 1,end]
+func (l *Log) setStart(start int, lastTerm int) {
+	panicIf(start <= l.Start, "start <= l.Start 说明安装 已经安装的") // 这说明我们早已经持久化过了这个
+	// 这种情况 出现在 rpc 延迟
+	// 正常情况下是不会出现的，因为快照只会压缩在 commit Index 的日志
+	// commit Index 是大多数人的心愿
+	// 所以发送这个的leader是不会被选中的
+
+	prevLastIndex := l.lastLogIndex()
+	// copy [start + 1, end]
+	diff := start - l.Start
+	clone := make([]LogEntry, len(l.Logs)-diff)
+	copy(clone, l.Logs[diff:])
+	l.Start = start
+	l.Logs = clone
+	panicIf(prevLastIndex != l.lastLogIndex(), fmt.Sprintf("set start error: lastindex want: %d but: %d", prevLastIndex, l.lastLogIndex()))
 }
 
 // return Logs[x:y]
 func (l *Log) cloneRange(x, y int) []LogEntry {
+	x, y = x-l.Start, y-l.Start
 	if x > y {
 		return nil
 	}
@@ -52,7 +77,7 @@ func (l *Log) cloneRange(x, y int) []LogEntry {
 
 // delete x + 1 -> end
 func (l *Log) cut2end(x int) {
-	l.Logs = l.cloneRange(0, x)
+	l.Logs = l.cloneRange(l.Start, x)
 }
 
 // return the first index >= term
@@ -60,8 +85,8 @@ func (l *Log) search(term int) int {
 	panicIf(term < 0, "term is negative")
 	idx := sort.Search(len(l.Logs), func(i int) bool {
 		return l.Logs[i].Term >= term
-	})
-	if idx == len(l.Logs) || l.entryAt(idx).Term != term {
+	}) + l.Start
+	if idx == len(l.Logs)+l.Start || l.entryAt(idx).Term != term {
 		return -1
 	}
 	return idx
@@ -72,7 +97,7 @@ func (l *Log) TermLastIndex(term int) int {
 	panicIf(term < 0, "term is negative")
 	idx := sort.Search(len(l.Logs), func(i int) bool {
 		return l.Logs[i].Term > term
-	}) - 1
+	}) - 1 + l.Start
 	panicIf(l.entryAt(idx).Term != term, "leader should have this term")
 	return idx
 }

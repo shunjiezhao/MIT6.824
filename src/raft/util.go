@@ -65,6 +65,9 @@ func Debug(rf *Raft, topic logTopic, format string, a ...interface{}) {
 		time := time.Since(debugStart).Microseconds()
 		time /= 100
 		prefix := fmt.Sprintf("%06d %v ", time, string(topic))
+		if rf != nil {
+			prefix += rf.name + " "
+		}
 		format = prefix + format
 		if rf == nil || rf.killed() == false {
 			log.Printf(format, a...)

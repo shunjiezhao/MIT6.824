@@ -20,8 +20,6 @@ package raft
 import (
 	"6.5840/labgob"
 	"bytes"
-	"fmt"
-
 	//	"bytes"
 	"math/rand"
 	"runtime"
@@ -78,7 +76,7 @@ type Raft struct {
 	state        state
 	electionTime time.Time
 
-	commitIndex int //已知已提交的最高的日志条目的索引（初始值为0，单调递增）
+	CommitIndex int //已知已提交的最高的日志条目的索引（初始值为0，单调递增）
 	lastApplied int //已经被应用到状态机的最高的日志条目的索引（初始值为0，单调递增）
 
 	nextIndex  []int // 对于每一台服务器，发送到该服务器的下一个日志条目的索引（初始值为领导人最后的日志条目的索引+1）
@@ -86,6 +84,12 @@ type Raft struct {
 
 	name    string // for debug
 	applyCh chan ApplyMsg
+
+	LastIncludedTerm, LastIncludedIndex int
+}
+type SnapShotInfo struct {
+	LastIncludedTerm, LastIncludedIndex int
+	Snapshot                            []byte
 }
 type state uint8
 
@@ -132,22 +136,21 @@ func (rf *Raft) GetState() (int, bool) {
 func (rf *Raft) persist() {
 	// Your code here (2C).
 	// Example:
+	rf.persister.Save(rf.getRaftState(), rf.persister.ReadSnapshot())
+	Debug(rf, dPersist, "persist success!")
+}
+
+func (rf *Raft) getRaftState() []byte {
 	w := new(bytes.Buffer)
 	e := labgob.NewEncoder(w)
-	if err := e.Encode(rf.CurrentTerm); err != nil {
-		panic(err)
+	if e.Encode(rf.CurrentTerm) != nil ||
+		e.Encode(rf.LastIncludedIndex) != nil ||
+		e.Encode(rf.LastIncludedTerm) != nil ||
+		e.Encode(rf.VotedFor) != nil ||
+		e.Encode(rf.Log) != nil {
+		panic("decode error")
 	}
-
-	if err := e.Encode(rf.VotedFor); err != nil {
-		panic(err)
-	}
-	if err := e.Encode(rf.Log); err != nil {
-		panic(err)
-	}
-
-	raftstate := w.Bytes()
-	rf.persister.Save(raftstate, nil)
-	Debug(rf, dPersist, "%s persist success!", rf.name)
+	return w.Bytes()
 }
 
 // restore previously persisted state.
@@ -157,28 +160,33 @@ func (rf *Raft) readPersist(data []byte) {
 	}
 	// Your code here (2C).
 	// Example:
+	rf.installRaftState(data)
+	rf.refreshElectionTime()
+	Debug(rf, dTest, "repersist success!")
+}
+
+func (rf *Raft) installRaftState(data []byte) {
 	r := bytes.NewBuffer(data)
 	d := labgob.NewDecoder(r)
 	var (
-		CurrentTerm int
-		log         Log
-		VoteFor     int
+		CurrentTerm, LastLogIndex, LastLogTerm int
+		log                                    Log
+		VoteFor                                int
 	)
-	if err := d.Decode(&CurrentTerm); err != nil {
-		panic(fmt.Sprintf("decode current term: %v", err))
+	if d.Decode(&CurrentTerm) != nil ||
+		d.Decode(&LastLogIndex) != nil ||
+		d.Decode(&LastLogTerm) != nil ||
+		d.Decode(&VoteFor) != nil ||
+		d.Decode(&log) != nil {
+		panic("decode error")
 	}
 	rf.CurrentTerm = CurrentTerm
-
-	if err := d.Decode(&VoteFor); err != nil {
-		panic(fmt.Sprintf("decode VoteFor: %v", err))
-	}
+	rf.LastIncludedIndex = LastLogIndex
+	rf.LastIncludedTerm = LastLogTerm
 	rf.VotedFor = VoteFor
-	if err := d.Decode(&log); err != nil {
-		panic(fmt.Sprintf("decode Log: %v", err))
-	}
 	rf.Log = log
-	rf.refreshElectionTime()
-	Debug(rf, dTest, "repersist success!")
+	Debug(rf, dInfo, "start: %d last Index: %d Term: %d", rf.Log.Start, rf.LastIncludedTerm, rf.LastIncludedTerm)
+	//rf.Log.Start = rf.LastIncludedIndex
 }
 
 // the service says it has created a snapshot that has
@@ -187,7 +195,20 @@ func (rf *Raft) readPersist(data []byte) {
 // that index. Raft should now trim its Log as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	// Your code here (2D).
+	rf.mu.Lock()
+	Debug(rf, dSnap, "%d vs %d", index, rf.LastIncludedIndex)
+	if index <= rf.LastIncludedIndex {
+		rf.mu.Unlock()
+		return
+	}
+	Debug(rf, dSnap, "update last index %d -> %d", rf.LastIncludedIndex, index)
 
+	term := rf.Log.entryAt(index).Term
+	rf.Log.setStart(index, term) // cut log -> [lastIncludeIndex, lastIncludeTerm,end]
+	rf.installSnapshotOPL(index, rf.Log.entryAt(index).Term, snapshot)
+
+	Debug(rf, dLog, "set start %v Log snap: %d", index, len(snapshot))
+	rf.mu.Unlock()
 }
 
 // 必须持有锁
@@ -195,7 +216,6 @@ func (rf *Raft) curTermLowL(term int) bool {
 	if term <= rf.CurrentTerm {
 		return false
 	}
-
 	rf.termLowL(term)
 	return true
 }
@@ -263,12 +283,14 @@ func (rf *Raft) Start(command interface{}) (index int, term int, isLeader bool) 
 	rf.persist()
 	rf.AppendMsgL(false)
 	// Your code here (2B).
-	Debug(rf, DSys, "%s start command", rf.name)
+	Debug(rf, DSys, "start command")
 	return index, rf.CurrentTerm, true
 }
 func (rf *Raft) AppendLogL(log LogEntry) {
 	// 做一个 广播， 并且呢通知自己 有东西到来
+	log.Index = rf.Log.lastLogIndex() + 1
 	rf.Log.append(log)
+
 }
 
 // the tester doesn't halt goroutines created by Raft after each test,
@@ -284,7 +306,7 @@ func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
 	rf.mu.Lock()
-	Debug(nil, DSys, "%s Killed", rf.State())
+	Debug(nil, DSys, "Killed %v", rf.State())
 	rf.mu.Unlock()
 }
 
@@ -349,7 +371,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	{
 		// Log init
-		rf.Log = mkLog()
+		rf.Log = mkLog(0, 0)
 		rf.logCond = sync.NewCond(&rf.mu)
 		rf.applyCh = applyCh
 		rf.nextIndex = mkSlice(len(rf.peers), 1)
@@ -360,17 +382,19 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.state = Follower
 	rf.CurrentTerm = 0
 	rf.refreshElectionTime()
-	rf.lastApplied = 0
 
 	//rf.timeTicker = time.NewTicker(getRandTime())
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
+	rf.readSnapShot(persister.ReadSnapshot())
+	rf.lastApplied = rf.LastIncludedIndex
+	rf.CommitIndex = rf.LastIncludedIndex
 
 	// Start ticker goroutine to Start elections
 	go rf.ticker()
 	go rf.apply()
 
-	Debug(rf, DSys, "%s Make ", rf.Name())
+	Debug(rf, DSys, "Make ")
 	return rf
 }
 
@@ -391,7 +415,7 @@ func panicIf(test bool, str string) {
 }
 
 func (rf *Raft) electionL() {
-	Debug(rf, dVote, "%s:%v  %v Start a new %v election ", rf.Name(), rf.State(), time.Now(), rf.CurrentTerm+1)
+	Debug(rf, dVote, ":%v  %v Start a new %v election ", rf.State(), time.Now(), rf.CurrentTerm+1)
 	rf.state = Candidate
 	rf.CurrentTerm++
 	rf.VotedFor = rf.me
@@ -401,6 +425,9 @@ func (rf *Raft) electionL() {
 
 func (rf *Raft) refreshElectionTime() {
 	rf.electionTime = time.Now().Add(heartTimeOut + time.Duration(rand.Int63()%int64(heartTimeOut)))
+}
+func (rf *Raft) retryElectionRefresh() {
+	rf.electionTime = time.Now().Add(heartTimeOut/4 + time.Duration(rand.Int63()%int64(heartTimeOut/4)))
 }
 func mkSlice(n int, i int) []int {
 	var ans = make([]int, n)
@@ -421,7 +448,7 @@ func (rf *Raft) termLowL(term int) {
 func (rf *Raft) freshNextSliceL() {
 	for i, _ := range rf.peers {
 		rf.nextIndex[i] = rf.Log.nextLogIndex()
-		Debug(rf, DIndex, "%s update %s next idx %d", rf.Name(), getServerName(i), rf.Log.nextLogIndex())
+		Debug(rf, DIndex, "update %s next idx %d", getServerName(i), rf.Log.nextLogIndex())
 		rf.matchIndex[i] = 0
 	}
 }
@@ -435,32 +462,45 @@ func (rf *Raft) apply() {
 		}
 		panicIf(rf.shouldApplyL() == false, "")
 
-		rf.lastApplied++ // 防止重复更新
-		msg := ApplyMsg{
-			CommandValid: true,
-			Command:      rf.Log.entryAt(rf.lastApplied).Command,
-			CommandIndex: rf.lastApplied,
+		var msg ApplyMsg
+		if rf.lastApplied < rf.LastIncludedIndex {
+			rf.lastApplied = rf.LastIncludedIndex
+			msg.SnapshotIndex = rf.LastIncludedIndex
+			msg.SnapshotTerm = rf.LastIncludedTerm
+			msg.SnapshotValid = true
+			msg.Snapshot = rf.persister.ReadSnapshot()
+
+		} else if rf.lastApplied < rf.CommitIndex {
+
+			rf.lastApplied++ // 防止重复更新
+			msg.CommandValid = true
+			msg.Command = rf.Log.entryAt(rf.lastApplied).Command
+			msg.CommandIndex = rf.lastApplied
+		} else {
+			panic("")
 		}
-		Debug(rf, dClient, "%s want to apply idx %d Log %+v", rf.name, rf.lastApplied, rf.Log.entryAt(rf.lastApplied))
-		Debug(rf, dLog, "%s apply idx %d msg", rf.Name(), rf.lastApplied)
+		Debug(rf, dClient, "want to apply idx %d Log %+v", rf.lastApplied, rf.Log.entryAt(rf.lastApplied))
 		rf.mu.Unlock()
 		rf.applyCh <- msg
-
 	}
 }
 
 func (rf *Raft) shouldApplyL() bool {
-	panicIf(rf.lastApplied > rf.commitIndex, "")
-	if rf.lastApplied >= rf.commitIndex { // 当提交的都已经被应用了
-		//rf.lastApplied = rf.commitIndex // 可能commit index 更新了
+	panicIf(rf.lastApplied > rf.CommitIndex, "")
+	if rf.lastApplied >= rf.CommitIndex { // 当提交的都已经被应用了
+		//rf.lastApplied = rf.CommitIndex // 可能commit index 更新了
 		return false
 	}
 	// start and last index
-	Debug(rf, dTest, "%s should apply last: %d commit: %d", rf.Name(), rf.lastApplied, rf.commitIndex)
+	Debug(rf, dTest, "should apply last: %d commit: %d", rf.lastApplied, rf.CommitIndex)
 
 	return true
 }
 
 func (rf *Raft) signLogEnter() {
 	rf.logCond.Broadcast()
+}
+
+func (rf *Raft) readSnapShot(snapshot []byte) {
+	rf.persister.Save(rf.getRaftState(), snapshot)
 }
