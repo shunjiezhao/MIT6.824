@@ -28,6 +28,7 @@ const (
 	dTest    logTopic = "TEST"
 	dTimer   logTopic = "TIMR"
 	dTrace   logTopic = "TRCE"
+	dLock    logTopic = "LOCK"
 	dVote    logTopic = "VOTE"
 	dWarn    logTopic = "WARN"
 )
@@ -58,9 +59,6 @@ func init() {
 }
 
 func Debug(rf *Raft, topic logTopic, format string, a ...interface{}) {
-	if topic == DHeart {
-		return
-	}
 	if _debug {
 		time := time.Since(debugStart).Microseconds()
 		time /= 100

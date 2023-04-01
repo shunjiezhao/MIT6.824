@@ -21,8 +21,8 @@ func (a InstallSnapshotReq) String() string {
 }
 func (rf *Raft) InstallSnapshot(args *InstallSnapshotReq, reply *InstallSnapshotResp) {
 
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	rf.Lock()
+	defer rf.Unlock()
 	reply.Term = rf.CurrentTerm
 	if args.Term < rf.CurrentTerm { // rule 1
 		Debug(rf, dWarn, "found %d 过期", getServerName(args.LeaderID))
@@ -73,8 +73,8 @@ func (rf *Raft) sendSnapShot(server int, args *InstallSnapshotReq) {
 		Debug(rf, "-> %s failed", getServerName(server))
 		return
 	}
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	rf.Lock()
+	defer rf.Unlock()
 	if rf.state != Leader {
 		Debug(rf, dInfo, "is not leader!")
 		return

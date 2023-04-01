@@ -29,8 +29,8 @@ type RequestVoteReply struct {
 // least as up-to-date as rece:iver’s Log, grant vote (§5.2, §5.4)
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	rf.Lock()
+	defer rf.Unlock()
 
 	// 所有的服务器都 适用
 	if rf.curTermLowL(args.Term) {
@@ -63,6 +63,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.refreshElectionTime()
 	//TODO: need to  persist
 	rf.VotedFor = args.CandidateId
+	rf.LeaderId = -1
 	rf.state = Candidate
 	rf.persist()
 	return
@@ -87,8 +88,8 @@ func (rf *Raft) SendVoteRequestL() {
 	}
 	go func() {
 		wg.Wait()
-		rf.mu.Lock()
-		defer rf.mu.Unlock()
+		rf.Lock()
+		defer rf.Unlock()
 		if rf.state == Candidate {
 			rf.retryElectionRefresh() // 再次选举
 			Debug(rf, dWarn, "选举失败 retry selection")
@@ -104,8 +105,8 @@ func (rf *Raft) sendVoteRequest(wg *sync.WaitGroup, count *int, other int, args 
 
 	assert(!call && reply.VoteGranted == true)
 
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	rf.Lock()
+	defer rf.Unlock()
 	if rf.curTermLowL(reply.Term) {
 		return // 过时立即转变 + 返回
 	} else {
@@ -126,6 +127,7 @@ func (rf *Raft) sendVoteRequest(wg *sync.WaitGroup, count *int, other int, args 
 }
 func (rf *Raft) becomeLeaderThenDoL() {
 	Debug(rf, dVote, " now is leader")
+	rf.LeaderId = rf.me
 	rf.state = Leader
 	//TODO: need to  persist
 	rf.persist()

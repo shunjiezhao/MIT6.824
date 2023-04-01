@@ -20,6 +20,8 @@ package raft
 import (
 	"6.5840/labgob"
 	"bytes"
+	"fmt"
+
 	//	"bytes"
 	"math/rand"
 	"runtime"
@@ -50,6 +52,10 @@ type ApplyMsg struct {
 	Snapshot      []byte
 	SnapshotTerm  int
 	SnapshotIndex int
+}
+
+func (m ApplyMsg) String() string {
+	return fmt.Sprintf("CommandValid: %v CommandIndex: %v Commanv: %d", m.CommandValid, m.CommandIndex, m.Command)
 }
 
 // A Go object implementing a single Raft peer.
@@ -86,6 +92,7 @@ type Raft struct {
 	applyCh chan ApplyMsg
 
 	LastIncludedTerm, LastIncludedIndex int
+	LeaderId                            int
 }
 type SnapShotInfo struct {
 	LastIncludedTerm, LastIncludedIndex int
@@ -97,7 +104,7 @@ const (
 	Follower = iota
 	Candidate
 	Leader
-	heartTime    = time.Millisecond * 200
+	heartTime    = time.Millisecond * 50
 	heartTimeOut = time.Second
 )
 
@@ -117,13 +124,22 @@ func (s state) String() string {
 // return CurrentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	rf.Lock()
+	defer rf.Unlock()
 
 	// Your code here (2A).
 	var term = rf.CurrentTerm
 	var isleader = rf.state == Leader
 	return term, isleader
+}
+
+func (rf *Raft) GetLeader() int {
+	rf.Lock()
+	defer rf.Unlock()
+	if rf.state == Leader {
+		return rf.me
+	}
+	return rf.LeaderId
 }
 
 // save Raft's persistent state to stable storage,
@@ -195,10 +211,10 @@ func (rf *Raft) installRaftState(data []byte) {
 // that index. Raft should now trim its Log as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	// Your code here (2D).
-	rf.mu.Lock()
+	rf.Lock()
 	Debug(rf, dSnap, "%d vs %d", index, rf.LastIncludedIndex)
 	if index <= rf.LastIncludedIndex {
-		rf.mu.Unlock()
+		rf.Unlock()
 		return
 	}
 	Debug(rf, dSnap, "update last index %d -> %d", rf.LastIncludedIndex, index)
@@ -208,7 +224,7 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	rf.installSnapshotOPL(index, rf.Log.entryAt(index).Term, snapshot)
 
 	Debug(rf, dLog, "set start %v Log snap: %d", index, len(snapshot))
-	rf.mu.Unlock()
+	rf.Unlock()
 }
 
 // 必须持有锁
@@ -216,7 +232,7 @@ func (rf *Raft) curTermLowL(term int) bool {
 	if term <= rf.CurrentTerm {
 		return false
 	}
-	rf.termLowL(term)
+	rf.becameFollower(term)
 	return true
 }
 
@@ -265,8 +281,8 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 // term. the third return value is true if this server believes it is
 // the leader.
 func (rf *Raft) Start(command interface{}) (index int, term int, isLeader bool) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	rf.Lock()
+	defer rf.Unlock()
 
 	if rf.state != Leader {
 		return -1, term, false
@@ -284,6 +300,7 @@ func (rf *Raft) Start(command interface{}) (index int, term int, isLeader bool) 
 	rf.AppendMsgL(false)
 	// Your code here (2B).
 	Debug(rf, DSys, "start command")
+	rf.signLogEnter()
 	return index, rf.CurrentTerm, true
 }
 func (rf *Raft) AppendLogL(log LogEntry) {
@@ -305,9 +322,9 @@ func (rf *Raft) AppendLogL(log LogEntry) {
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
-	rf.mu.Lock()
+	rf.Lock()
 	Debug(nil, DSys, "Killed %v", rf.State())
-	rf.mu.Unlock()
+	rf.Unlock()
 }
 
 func (rf *Raft) killed() bool {
@@ -324,11 +341,11 @@ func (rf *Raft) ticker() {
 	for rf.killed() == false {
 		// Your code here (2A)
 		// Check if a leader electionL should be started.
-		rf.mu.Lock()
+		rf.Lock()
 		if rf.state == Leader {
 			rf.refreshElectionTime()
-			rf.AppendMsgL(false)
-			rf.mu.Unlock()
+			rf.AppendMsgL(true)
+			rf.Unlock()
 			time.Sleep(heartTime)
 			continue
 		}
@@ -336,7 +353,7 @@ func (rf *Raft) ticker() {
 		if rf.ElectionTimeOut() {
 			rf.electionL()
 		}
-		rf.mu.Unlock()
+		rf.Unlock()
 		// pause for a random amount of time between 50 and 350
 		// milliseconds.
 		ms := 50 + (rand.Int63() % 300)
@@ -379,9 +396,10 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	}
 	// Your initialization code here (2A, 2B, 2C).
 	rf.VotedFor = -1
+	rf.LeaderId = -1
 	rf.state = Follower
 	rf.CurrentTerm = 0
-	rf.refreshElectionTime()
+	rf.retryElectionRefresh()
 
 	//rf.timeTicker = time.NewTicker(getRandTime())
 	// initialize from state persisted before a crash
@@ -436,10 +454,11 @@ func mkSlice(n int, i int) []int {
 	}
 	return ans
 }
-func (rf *Raft) termLowL(term int) {
+func (rf *Raft) becameFollower(term int) {
 	rf.state = Follower
 	rf.CurrentTerm = term
 	rf.VotedFor = -1
+	rf.LeaderId = -1
 	//TODO: need to persist
 	rf.persist()
 }
@@ -456,7 +475,8 @@ func (rf *Raft) freshNextSliceL() {
 func (rf *Raft) apply() {
 
 	for rf.killed() == false {
-		rf.mu.Lock()
+		Debug(rf, dInfo, "apply msg")
+		rf.Lock()
 		for rf.shouldApplyL() == false {
 			rf.logCond.Wait()
 		}
@@ -479,20 +499,22 @@ func (rf *Raft) apply() {
 		} else {
 			panic("")
 		}
+		appIdx := rf.lastApplied
 		Debug(rf, dClient, "want to apply idx %d Log %+v", rf.lastApplied, rf.Log.entryAt(rf.lastApplied))
-		rf.mu.Unlock()
+		rf.Unlock()
 		rf.applyCh <- msg
+		Debug(rf, dClient, "apply idx %d Log success", appIdx)
 	}
 }
 
 func (rf *Raft) shouldApplyL() bool {
 	panicIf(rf.lastApplied > rf.CommitIndex, "")
+	Debug(rf, dTest, "should apply last: %d commit: %d", rf.lastApplied, rf.CommitIndex)
 	if rf.lastApplied >= rf.CommitIndex { // 当提交的都已经被应用了
 		//rf.lastApplied = rf.CommitIndex // 可能commit index 更新了
 		return false
 	}
 	// start and last index
-	Debug(rf, dTest, "should apply last: %d commit: %d", rf.lastApplied, rf.CommitIndex)
 
 	return true
 }
@@ -503,4 +525,14 @@ func (rf *Raft) signLogEnter() {
 
 func (rf *Raft) readSnapShot(snapshot []byte) {
 	rf.persister.Save(rf.getRaftState(), snapshot)
+}
+
+func (rf *Raft) Lock() {
+	Debug(rf, dLock, "Lock")
+	rf.mu.Lock()
+}
+
+func (rf *Raft) Unlock() {
+	Debug(rf, dLock, "Unlock")
+	rf.mu.Unlock()
 }
