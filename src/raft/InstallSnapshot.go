@@ -1,6 +1,9 @@
 package raft
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 type InstallSnapshotReq struct {
 	Term              int
@@ -21,8 +24,9 @@ func (a InstallSnapshotReq) String() string {
 }
 func (rf *Raft) InstallSnapshot(args *InstallSnapshotReq, reply *InstallSnapshotResp) {
 
-	rf.Lock()
-	defer rf.Unlock()
+	local := fmt.Sprintf("snapshot %v", time.Now())
+	rf.Lock(local)
+	defer rf.Unlock(local)
 	reply.Term = rf.CurrentTerm
 	if args.Term < rf.CurrentTerm { // rule 1
 		Debug(rf, dWarn, "found %d 过期", getServerName(args.LeaderID))
@@ -73,8 +77,9 @@ func (rf *Raft) sendSnapShot(server int, args *InstallSnapshotReq) {
 		Debug(rf, "-> %s failed", getServerName(server))
 		return
 	}
-	rf.Lock()
-	defer rf.Unlock()
+	local := fmt.Sprintf("sendSnapShot %v", time.Now().Unix())
+	rf.Lock(local)
+	defer rf.Unlock(local)
 	if rf.state != Leader {
 		Debug(rf, dInfo, "is not leader!")
 		return

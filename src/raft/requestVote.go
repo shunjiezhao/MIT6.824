@@ -29,8 +29,10 @@ type RequestVoteReply struct {
 // least as up-to-date as rece:iver’s Log, grant vote (§5.2, §5.4)
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
-	rf.Lock()
-	defer rf.Unlock()
+	local := getLocal("request vote")
+
+	rf.Lock(local)
+	defer rf.Unlock(local)
 
 	// 所有的服务器都 适用
 	if rf.curTermLowL(args.Term) {
@@ -88,8 +90,9 @@ func (rf *Raft) SendVoteRequestL() {
 	}
 	go func() {
 		wg.Wait()
-		rf.Lock()
-		defer rf.Unlock()
+		local := getLocal("wait done")
+		rf.Lock(local)
+		defer rf.Unlock(local)
 		if rf.state == Candidate {
 			rf.retryElectionRefresh() // 再次选举
 			Debug(rf, dWarn, "选举失败 retry selection")
@@ -105,8 +108,9 @@ func (rf *Raft) sendVoteRequest(wg *sync.WaitGroup, count *int, other int, args 
 
 	assert(!call && reply.VoteGranted == true)
 
-	rf.Lock()
-	defer rf.Unlock()
+	local := getLocal("send vote request")
+	rf.Lock(local)
+	defer rf.Unlock(local)
 	if rf.curTermLowL(reply.Term) {
 		return // 过时立即转变 + 返回
 	} else {

@@ -124,8 +124,9 @@ func (s state) String() string {
 // return CurrentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
-	rf.Lock()
-	defer rf.Unlock()
+	local := getLocal("get state")
+	rf.Lock(local)
+	defer rf.Unlock(local)
 
 	// Your code here (2A).
 	var term = rf.CurrentTerm
@@ -134,8 +135,9 @@ func (rf *Raft) GetState() (int, bool) {
 }
 
 func (rf *Raft) GetLeader() int {
-	rf.Lock()
-	defer rf.Unlock()
+	local := getLocal("get leader")
+	rf.Lock(local)
+	defer rf.Unlock(local)
 	if rf.state == Leader {
 		return rf.me
 	}
@@ -211,10 +213,11 @@ func (rf *Raft) installRaftState(data []byte) {
 // that index. Raft should now trim its Log as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	// Your code here (2D).
-	rf.Lock()
+	local := getLocal("snapshot")
+	rf.Lock(local)
 	Debug(rf, dSnap, "%d vs %d", index, rf.LastIncludedIndex)
 	if index <= rf.LastIncludedIndex {
-		rf.Unlock()
+		rf.Unlock(local)
 		return
 	}
 	Debug(rf, dSnap, "update last index %d -> %d", rf.LastIncludedIndex, index)
@@ -224,7 +227,7 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	rf.installSnapshotOPL(index, rf.Log.entryAt(index).Term, snapshot)
 
 	Debug(rf, dLog, "set start %v Log snap: %d", index, len(snapshot))
-	rf.Unlock()
+	rf.Unlock(local)
 }
 
 // 必须持有锁
@@ -281,8 +284,9 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 // term. the third return value is true if this server believes it is
 // the leader.
 func (rf *Raft) Start(command interface{}) (index int, term int, isLeader bool) {
-	rf.Lock()
-	defer rf.Unlock()
+	local := getLocal("start")
+	rf.Lock(local)
+	defer rf.Unlock(local)
 
 	if rf.state != Leader {
 		return -1, term, false
@@ -299,7 +303,7 @@ func (rf *Raft) Start(command interface{}) (index int, term int, isLeader bool) 
 	rf.persist()
 	rf.AppendMsgL(false)
 	// Your code here (2B).
-	Debug(rf, DSys, "start command")
+	Debug(rf, DSys, "start command %d", index)
 	rf.signLogEnter()
 	return index, rf.CurrentTerm, true
 }
@@ -322,9 +326,10 @@ func (rf *Raft) AppendLogL(log LogEntry) {
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
-	rf.Lock()
+	local := getLocal("kill")
+	rf.Lock(local)
 	Debug(nil, DSys, "Killed %v", rf.State())
-	rf.Unlock()
+	rf.Unlock(local)
 }
 
 func (rf *Raft) killed() bool {
@@ -341,11 +346,12 @@ func (rf *Raft) ticker() {
 	for rf.killed() == false {
 		// Your code here (2A)
 		// Check if a leader electionL should be started.
-		rf.Lock()
+		local := getLocal("ticker")
+		rf.Lock(local)
 		if rf.state == Leader {
 			rf.refreshElectionTime()
 			rf.AppendMsgL(true)
-			rf.Unlock()
+			rf.Unlock(local)
 			time.Sleep(heartTime)
 			continue
 		}
@@ -353,10 +359,10 @@ func (rf *Raft) ticker() {
 		if rf.ElectionTimeOut() {
 			rf.electionL()
 		}
-		rf.Unlock()
+		rf.Unlock(local)
 		// pause for a random amount of time between 50 and 350
 		// milliseconds.
-		ms := 50 + (rand.Int63() % 300)
+		ms := 50 + (rand.Int63() % 200)
 		time.Sleep(time.Duration(ms) * time.Millisecond)
 	}
 }
@@ -471,12 +477,16 @@ func (rf *Raft) freshNextSliceL() {
 		rf.matchIndex[i] = 0
 	}
 }
+func getLocal(s string) string {
+	return fmt.Sprintf("%s %v", s, time.Now().UnixNano())
+}
 
 func (rf *Raft) apply() {
 
 	for rf.killed() == false {
 		Debug(rf, dInfo, "apply msg")
-		rf.Lock()
+		local := getLocal("apply")
+		rf.Lock(local)
 		for rf.shouldApplyL() == false {
 			rf.logCond.Wait()
 		}
@@ -501,7 +511,7 @@ func (rf *Raft) apply() {
 		}
 		appIdx := rf.lastApplied
 		Debug(rf, dClient, "want to apply idx %d Log %+v", rf.lastApplied, rf.Log.entryAt(rf.lastApplied))
-		rf.Unlock()
+		rf.Unlock(local)
 		rf.applyCh <- msg
 		Debug(rf, dClient, "apply idx %d Log success", appIdx)
 	}
@@ -527,12 +537,14 @@ func (rf *Raft) readSnapShot(snapshot []byte) {
 	rf.persister.Save(rf.getRaftState(), snapshot)
 }
 
-func (rf *Raft) Lock() {
-	Debug(rf, dLock, "Lock")
+func (rf *Raft) Lock(local string) {
+	Debug(rf, dLock, "Lock %s", local)
 	rf.mu.Lock()
+	Debug(rf, dLock, "Lock %s success", local)
+
 }
 
-func (rf *Raft) Unlock() {
-	Debug(rf, dLock, "Unlock")
+func (rf *Raft) Unlock(local string) {
+	Debug(rf, dLock, "Unlock %s", local)
 	rf.mu.Unlock()
 }

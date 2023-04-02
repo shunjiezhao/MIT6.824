@@ -2,7 +2,7 @@ package raft
 
 import (
 	"fmt"
-	"sync"
+	"time"
 )
 
 type AppendEntriesArgs struct {
@@ -40,8 +40,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	var prev = 0 // debug
 
 	// Your code here (2A, 2B).
-	rf.Lock()
-	defer rf.Unlock()
+	local := fmt.Sprintf("append entries 1 %v", time.Now().Unix())
+	rf.Lock(local)
+	defer rf.Unlock(local)
 
 	rf.printAppendReplyLog(args)
 
@@ -55,14 +56,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	// 所有服务器遵守的规则
-	if args.Term > rf.CurrentTerm {
-		rf.becameFollower(args.Term)
-
-	}
+	rf.curTermLowL(args.Term)
 
 	rf.LeaderId = args.LeaderId
 	reply.Term = rf.CurrentTerm
 	rf.refreshElectionTime() // 当前term的合法leader
+	rf.signLogEnter()
 	reply.XTerm = -1
 	reply.XLen = -1
 	reply.XIndex = -1
@@ -156,19 +155,8 @@ func (rf *Raft) printCallLog(idx int, args *AppendEntriesArgs, call bool, reply 
 	}
 }
 
-//TODO: 这里改为这样
-// func(){
-// wg.done
-// }
-// wg.wait()
-//	统计成功的数量
-
 // rpc 调用，返回reply.Success 是否成功
-func (rf *Raft) appendMsg(idx int, args *AppendEntriesArgs, wg *sync.WaitGroup, count *int) {
-	if wg != nil {
-		defer wg.Done()
-	}
-
+func (rf *Raft) appendMsg(idx int, args *AppendEntriesArgs) {
 	var reply AppendEntriesReply
 	call := rf.appendEntries(idx, args, &reply)
 	rf.printCallLog(idx, args, call, &reply)
@@ -178,8 +166,9 @@ func (rf *Raft) appendMsg(idx int, args *AppendEntriesArgs, wg *sync.WaitGroup, 
 		return
 	}
 
-	rf.Lock()
-	defer rf.Unlock()
+	local := fmt.Sprintf("receive appendMsgL 1 %v", time.Now().Unix())
+	rf.Lock(local)
+	defer rf.Unlock(local)
 
 	if rf.curTermLowL(reply.Term) {
 		// 如果一个 candidate 或者 leader 发现自己的任期号过期了，它就会立刻回到 follower 状态。
@@ -191,57 +180,34 @@ func (rf *Raft) appendMsg(idx int, args *AppendEntriesArgs, wg *sync.WaitGroup, 
 	}
 
 	if rf.state == Leader {
-		if reply.Success && count != nil {
-			*count++
-		}
 		rf.procAppendReplyL(idx, args, &reply)
 	}
 }
 func (rf *Raft) AppendMsgL(heart bool) {
-	var wg sync.WaitGroup
-	var count = 1
-
+	rf.signLogEnter()
 	for i, _ := range rf.peers {
 		if i == rf.me {
 			continue
 		}
 
 		var log []LogEntry
-
-		wg.Add(1)
 		if rf.nextIndex[i] <= rf.Log.lastLogIndex() && // 有东西可以发送
 			rf.nextIndex[i] >= rf.Log.start() { // 发送的起点 有 日志
 			Debug(rf, dLog, "send Log to %s [%d: %d]", getServerName(i), rf.nextIndex[i], rf.Log.lastLogIndex())
 			log = rf.Log.cloneRange(rf.nextIndex[i], rf.Log.lastLogIndex())
-			rf.SendLogLG(i, log, &wg, &count)
+			rf.SendLogLG(i, log)
 		} else if rf.nextIndex[i] < rf.Log.start() { // 如果说没有日志
 			// send snapshot
 			Debug(rf, dLog, "send snapshot to %s start: %d", getServerName(i), rf.Log.start())
 			rf.sendSnapshotLG(i)
 			continue
 		} else {
-			rf.SendLogLG(i, log, &wg, &count)
+			rf.SendLogLG(i, log)
 		}
-
-	}
-
-	if heart {
-		go func(term int) {
-			wg.Wait()
-			rf.Lock()
-			defer rf.Unlock()
-			if term != rf.CurrentTerm {
-				return
-			}
-
-			if count < len(rf.peers)/2 {
-				rf.becameFollower(term)
-			}
-		}(rf.CurrentTerm)
 	}
 }
 
-func (rf *Raft) SendLogLG(idx int, entries []LogEntry, wg *sync.WaitGroup, cout *int) {
+func (rf *Raft) SendLogLG(idx int, entries []LogEntry) {
 	nIndex := rf.nextIndex[idx] - 1
 	if nIndex < rf.Log.Start {
 		nIndex = rf.Log.Start
@@ -259,7 +225,7 @@ func (rf *Raft) SendLogLG(idx int, entries []LogEntry, wg *sync.WaitGroup, cout 
 		Entries:      entries,
 	}
 
-	go rf.appendMsg(idx, args, wg, cout) // 发送 rpc
+	go rf.appendMsg(idx, args) // 发送 rpc
 }
 
 func (rf *Raft) procAppendReplyL(idx int, args *AppendEntriesArgs, reply *AppendEntriesReply) {
@@ -293,7 +259,7 @@ func (rf *Raft) procAppendReplyL(idx int, args *AppendEntriesArgs, reply *Append
 			println(rf.nextIndex[idx], rf.Log.start())
 			rf.sendSnapshotLG(idx) //
 		} else {
-			rf.SendLogLG(idx, rf.Log.cloneRange(rf.nextIndex[idx], rf.Log.lastLogIndex()), nil, nil) //
+			rf.SendLogLG(idx, rf.Log.cloneRange(rf.nextIndex[idx], rf.Log.lastLogIndex())) //
 		}
 		rf.signLogEnter()
 		return

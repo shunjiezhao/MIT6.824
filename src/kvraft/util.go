@@ -34,7 +34,7 @@ const (
 )
 
 // Debugging
-var _debug = true
+var _debug = false
 
 var debugStart time.Time
 var debugVerbosity int
@@ -72,7 +72,6 @@ func Debug(kv *KVServer, topic logTopic, format string, a ...interface{}) {
 
 		format = prefix + format
 		log.Printf(format, a...)
-
 	}
 }
 

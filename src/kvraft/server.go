@@ -22,10 +22,6 @@ func (receiver Op) String() string {
 	return fmt.Sprintf("key: %v value: %v opType: %v", receiver.Key, receiver.Value, receiver.OpType)
 }
 
-type ResultInfo struct {
-	SeqNum int64
-	OpReply
-}
 type KVServer struct {
 	mu      sync.Mutex
 	me      int
@@ -42,19 +38,21 @@ type KVServer struct {
 	// clientId : seq
 	IsExec map[int]int64 // 5
 	// clientId: result
-	Result map[int][]ResultInfo // 6
+	Result map[int]map[int64]OpReply // 6
+
+	done chan struct{}
 }
 
 func (kv *KVServer) Name() string {
 	return fmt.Sprintf("KV-%d", kv.me)
 }
 
-func (kv *KVServer) Lock() {
-	Debug(kv, dLock, "Lock")
+func (kv *KVServer) Lock(local string) {
+	Debug(kv, dLock, "Lock %s", local)
 	kv.mu.Lock()
 }
-func (kv *KVServer) UnLock() {
-	Debug(kv, dLock, "UnLock")
+func (kv *KVServer) UnLock(local string) {
+	Debug(kv, dLock, "UnLock %s", local)
 	kv.mu.Unlock()
 }
 
@@ -70,6 +68,7 @@ func (kv *KVServer) Kill() {
 	atomic.StoreInt32(&kv.dead, 1)
 	kv.rf.Kill()
 	// Your code here, if desired.
+	close(kv.done)
 }
 
 func (kv *KVServer) killed() bool {
@@ -105,9 +104,10 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.Store = newStore()
 	kv.ApplyCond = sync.NewCond(&kv.mu)
 	kv.Response = make(map[int]chan ApplyResp)
-	kv.Result = map[int][]ResultInfo{}
+	kv.Result = map[int]map[int64]OpReply{}
 	kv.IsExec = map[int]int64{}
 	go kv.apply()
+	kv.done = make(chan struct{})
 
 	// You may need initialization code here.
 

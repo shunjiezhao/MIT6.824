@@ -34,7 +34,7 @@ const (
 )
 
 // Debugging
-var _debug = true
+var _debug = false
 
 var debugStart time.Time
 var debugVerbosity int
@@ -70,15 +70,6 @@ func Debug(rf *Raft, topic logTopic, format string, a ...interface{}) {
 		if rf == nil || rf.killed() == false {
 			log.Printf(format, a...)
 		}
-	}
-}
-func DebugT(t time.Time, topic logTopic, format string, a ...interface{}) {
-	if _debug {
-		time := t.Sub(debugStart).Microseconds()
-		time /= 100
-		prefix := fmt.Sprintf("%06d %v ", time, string(topic))
-		format = prefix + format
-		log.Printf(format, a...)
 	}
 }
 

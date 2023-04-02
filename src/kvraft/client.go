@@ -29,6 +29,7 @@ type Clerk struct {
 	mu       *sync.Mutex
 	ID       int
 	SeqNum   atomic.Int64
+	next     int
 }
 
 func nrand() int64 {
@@ -73,7 +74,7 @@ func (ck *Clerk) Get(key string) string {
 // arguments. and reply must be passed as a pointer.
 func (ck *Clerk) Op(key string, value string, op string) string {
 	defer func() {
-		println(op, "success")
+		Debug(nil, dInfo, "%s success", op)
 	}()
 	var req = OpArgs{
 		BaseReq: BaseReq{
@@ -85,46 +86,50 @@ func (ck *Clerk) Op(key string, value string, op string) string {
 		OpType: op,
 	}
 
-	Debug(nil, dClient, "%s begin %s", op, req)
 	var reply OpReply
-
-	next := ck.leaderId
-	if next == -1 {
-		next = int(nrand()) % len(ck.servers)
-	}
 
 	for {
 
-		Debug(nil, dClient, "call %d server", next)
+		Debug(nil, dClient, "call %d server %s begin %s", ck.getNext(), op, req)
 
 		var call bool
-		call = ck.servers[next].Call("KVServer.Op", &req, &reply)
+		call = ck.servers[ck.getNext()].Call("KVServer.Op", &req, &reply)
 		// You will have to modify this function.
 		if !call {
+			Debug(nil, dWarn, "call %v false", ck.getNext())
+			ck.refreshNext()
 			continue
 		}
 
-		Debug(nil, dInfo, "%d call reply %s", next, reply)
+		Debug(nil, dInfo, "%d call reply %s", ck.getNext(), reply)
 		switch reply.Status {
 		case OK:
-			ck.leaderId = next
+			ck.setNext(reply.LeaderId)
 			return reply.Response
 
 		case ErrNotLeader:
-			//ck.leaderId = reply.LeaderId
 			Debug(nil, dClient, "get leaderid: %v", ck.leaderId)
-			//if ck.leaderId == -1 {
-			next = int(nrand()) % len(ck.servers)
-			//}
+			ck.refreshNext()
 			continue
 
 		case ErrNoKey:
 			return ""
 		case ErrTimeOut:
+			ck.refreshNext()
 			Debug(nil, dClient, "query time out")
 		}
 		time.Sleep(time.Millisecond * 500)
 	}
+}
+func (ck *Clerk) getNext() int {
+	return ck.next
+}
+func (ck *Clerk) setNext(next int) {
+	ck.next = next
+}
+func (ck *Clerk) refreshNext() int {
+	ck.next = int(nrand()) % len(ck.servers)
+	return ck.next
 }
 
 func (ck *Clerk) Put(key string, value string) {
