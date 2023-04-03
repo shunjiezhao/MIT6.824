@@ -40,7 +40,8 @@ type KVServer struct {
 	// clientId: result
 	Result map[int]map[int64]OpReply // 6
 
-	done chan struct{}
+	done          chan struct{}
+	raftPersister *raft.Persister
 }
 
 func (kv *KVServer) Name() string {
@@ -80,7 +81,7 @@ func (kv *KVServer) killed() bool {
 // servers that will cooperate via Raft to
 // form the fault-tolerant key/value service.
 // me is the index of the current server in servers[].
-// the k/v server should store snapshots through the underlying Raft
+// the k/v server should Map snapshots through the underlying Raft
 // implementation, which should call persister.SaveStateAndSnapshot() to
 // atomically save the Raft state along with the snapshot.
 // the k/v server should snapshot when Raft's saved state exceeds maxraftstate bytes,
@@ -95,11 +96,12 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	kv := new(KVServer)
 	kv.me = me
-	kv.maxraftstate = maxraftstate
+	kv.maxraftstate = maxraftstate // snap shot size
 
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 	// You may need initialization code here.
+	kv.raftPersister = persister
 
 	kv.Store = newStore()
 	kv.ApplyCond = sync.NewCond(&kv.mu)
@@ -109,7 +111,17 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	go kv.apply()
 	kv.done = make(chan struct{})
 
+	snapshot := persister.ReadSnapshot()
+	kv.InstallStoreBytes(snapshot)
+
 	// You may need initialization code here.
 
 	return kv
+}
+
+func (kv *KVServer) shouldSnapShotL() bool {
+	if kv.raftPersister.RaftStateSize() < kv.maxraftstate-100 || kv.maxraftstate == -1 {
+		return false
+	}
+	return true
 }

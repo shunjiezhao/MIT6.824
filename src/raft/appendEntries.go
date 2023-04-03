@@ -256,7 +256,7 @@ func (rf *Raft) procAppendReplyL(idx int, args *AppendEntriesArgs, reply *Append
 		Debug(rf, dWarn, " retry to send Log to %s next: %d start: %d", getServerName(idx), rf.nextIndex[idx], rf.Log.start())
 
 		if rf.nextIndex[idx] < rf.Log.start() {
-			println(rf.nextIndex[idx], rf.Log.start())
+			Debug(rf, dSnap, "%s next: %d start: %d", getServerName(idx), rf.nextIndex[idx], rf.Log.start())
 			rf.sendSnapshotLG(idx) //
 		} else {
 			rf.SendLogLG(idx, rf.Log.cloneRange(rf.nextIndex[idx], rf.Log.lastLogIndex())) //

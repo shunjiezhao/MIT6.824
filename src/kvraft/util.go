@@ -34,7 +34,7 @@ const (
 )
 
 // Debugging
-var _debug = false
+var _debug = true
 
 var debugStart time.Time
 var debugVerbosity int

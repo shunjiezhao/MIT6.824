@@ -9,7 +9,7 @@ func getLocal(string2 string) string {
 	return fmt.Sprintf("%s %v", string2, time.Now().Unix())
 }
 func (kv *KVServer) Op(args *OpArgs, reply *OpReply) {
-	local := getLocal("op ")
+	local := getLocal("op")
 	kv.Lock(local)
 	var (
 		index  int
@@ -47,6 +47,7 @@ func (kv *KVServer) Op(args *OpArgs, reply *OpReply) {
 		Debug(kv, dCH, "add %v chan", index)
 	} else {
 		Debug(kv, dCH, "exist %v chan", index)
+		ch = kv.Response[index]
 	}
 	kv.UnLock(local)
 	if ch == nil {
