@@ -1,4 +1,4 @@
-package raft
+package kvraft
 
 import (
 	"fmt"
@@ -13,9 +13,10 @@ type logTopic string
 const (
 	dClient  logTopic = "CLNT"
 	dCommit  logTopic = "CMIT"
-	dDrop    logTopic = "DROP"
+	dCH      logTopic = "CHAN"
 	dError   logTopic = "ERRO"
 	dInfo    logTopic = "INFO"
+	dLock    logTopic = "LOCK"
 	dLeader  logTopic = "LEAD"
 	dLog     logTopic = "LOG1"
 	DHeart   logTopic = "Heart"
@@ -28,7 +29,6 @@ const (
 	dTest    logTopic = "TEST"
 	dTimer   logTopic = "TIMR"
 	dTrace   logTopic = "TRCE"
-	dLock    logTopic = "LOCK"
 	dVote    logTopic = "VOTE"
 	dWarn    logTopic = "WARN"
 )
@@ -58,21 +58,32 @@ func init() {
 	log.SetFlags(log.Flags() &^ (log.Ldate | log.Ltime))
 }
 
-func Debug(rf *Raft, topic logTopic, format string, a ...interface{}) {
+func Debug(kv *KVServer, topic logTopic, format string, a ...interface{}) {
+	if topic == DHeart {
+		return
+	}
 	if _debug {
 		time := time.Since(debugStart).Microseconds()
 		time /= 100
 		prefix := fmt.Sprintf("%06d %v ", time, string(topic))
-		if rf != nil {
-			prefix += rf.name + " "
+		if kv != nil {
+			prefix += kv.Name() + " "
 		}
+
 		format = prefix + format
-		if rf == nil || rf.killed() == false {
-			log.Printf(format, a...)
-		}
+		log.Printf(format, a...)
 	}
 }
 
 func getServerName(me int) string {
 	return fmt.Sprintf("S%d", me)
+}
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+func min(a, b int) int {
+	return -max(-a, -b)
 }

@@ -2,6 +2,7 @@ package raft
 
 import (
 	"fmt"
+	"time"
 )
 
 type AppendEntriesArgs struct {
@@ -39,8 +40,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	var prev = 0 // debug
 
 	// Your code here (2A, 2B).
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	local := fmt.Sprintf("append entries 1 %v", time.Now().Unix())
+	rf.Lock(local)
+	defer rf.Unlock(local)
 
 	rf.printAppendReplyLog(args)
 
@@ -54,13 +56,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	// 所有服务器遵守的规则
-	if args.Term > rf.CurrentTerm {
-		rf.termLowL(args.Term)
+	rf.curTermLowL(args.Term)
 
-	}
-
+	rf.LeaderId = args.LeaderId
 	reply.Term = rf.CurrentTerm
 	rf.refreshElectionTime() // 当前term的合法leader
+	rf.signLogEnter()
 	reply.XTerm = -1
 	reply.XLen = -1
 	reply.XIndex = -1
@@ -165,8 +166,9 @@ func (rf *Raft) appendMsg(idx int, args *AppendEntriesArgs) {
 		return
 	}
 
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	local := fmt.Sprintf("receive appendMsgL 1 %v", time.Now().Unix())
+	rf.Lock(local)
+	defer rf.Unlock(local)
 
 	if rf.curTermLowL(reply.Term) {
 		// 如果一个 candidate 或者 leader 发现自己的任期号过期了，它就会立刻回到 follower 状态。
@@ -182,6 +184,7 @@ func (rf *Raft) appendMsg(idx int, args *AppendEntriesArgs) {
 	}
 }
 func (rf *Raft) AppendMsgL(heart bool) {
+	rf.signLogEnter()
 	for i, _ := range rf.peers {
 		if i == rf.me {
 			continue
@@ -201,7 +204,6 @@ func (rf *Raft) AppendMsgL(heart bool) {
 		} else {
 			rf.SendLogLG(i, log)
 		}
-
 	}
 }
 
@@ -259,6 +261,7 @@ func (rf *Raft) procAppendReplyL(idx int, args *AppendEntriesArgs, reply *Append
 		} else {
 			rf.SendLogLG(idx, rf.Log.cloneRange(rf.nextIndex[idx], rf.Log.lastLogIndex())) //
 		}
+		rf.signLogEnter()
 		return
 	}
 
