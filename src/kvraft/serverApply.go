@@ -1,5 +1,7 @@
 package kvraft
 
+import "6.5840/raft"
+
 func (kv *KVServer) apply() {
 	for {
 		select {
@@ -7,44 +9,51 @@ func (kv *KVServer) apply() {
 			if kv.killed() {
 				return
 			}
-			if msg.CommandValid == false {
-				Debug(kv, dWarn, "msg is not valid %s", msg)
-				panic("")
-			}
 			local := getLocal("apply")
 			kv.Lock(local)
-			ch := kv.Response[msg.CommandIndex]
-
-			op := msg.Command.(Op)
-			lastExec := kv.IsExec[op.ClientID]
-
-			var resp ApplyResp
-			if op.SeqNum > lastExec {
-				if op.SeqNum != lastExec+1 {
-					Debug(kv, dWarn, "op: %s lastExec: %d", op, lastExec)
-					panic("should equal")
-				}
-
-				resp = kv.storeExecL(op)
-				kv.saveToResultL(op, resp)
+			if msg.SnapshotValid == true {
+				kv.applySnapShotL(msg)
+			} else if msg.CommandValid == true {
+				kv.applyOpL(msg)
 			} else {
-				resp = kv.Result[op.ClientID][op.SeqNum].ApplyResp
+				panic("")
 			}
 			kv.UnLock(local)
-
-			_, isLeader := kv.rf.GetState()
-			if isLeader == false {
-				continue
-			}
-			go func() {
-				Debug(kv, dInfo, "send response: %+v", resp)
-				if ch != nil {
-					ch <- resp
-				}
-			}()
-
 		}
 	}
+}
+func (kv *KVServer) applyOpL(msg raft.ApplyMsg) {
+
+	ch := kv.Response[msg.CommandIndex]
+
+	op := msg.Command.(Op)
+	lastExec := kv.IsExec[op.ClientID]
+
+	var resp ApplyResp
+	if op.SeqNum > lastExec {
+		if op.SeqNum != lastExec+1 {
+			Debug(kv, dWarn, "op: %s lastExec: %d", op, lastExec)
+			panic("should equal")
+		}
+		resp = kv.storeExecL(op)
+		kv.saveToResultL(op, resp)
+	} else {
+		resp = kv.Result[op.ClientID][op.SeqNum].ApplyResp
+	}
+	if kv.shouldSnapShotL() {
+		kv.rf.Snapshot(msg.CommandIndex, kv.GetStoreBytes())
+	}
+
+	_, isLeader := kv.rf.GetState()
+	if isLeader == false {
+		return
+	}
+	go func() {
+		Debug(kv, dInfo, "send response: %+v", resp)
+		if ch != nil {
+			ch <- resp
+		}
+	}()
 }
 
 func (kv *KVServer) storeExecL(op Op) ApplyResp {
@@ -86,4 +95,7 @@ func (kv *KVServer) saveToResultL(op Op, resp ApplyResp) {
 		},
 	}
 	Debug(kv, dInfo, "save reponse op: %s resp: %s", op, resp)
+}
+func (kv *KVServer) applySnapShotL(msg raft.ApplyMsg) {
+	kv.InstallStoreBytes(msg.Snapshot)
 }
