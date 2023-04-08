@@ -4,14 +4,24 @@ package shardctrler
 // Shardctrler clerk.
 //
 
-import "6.5840/labrpc"
+import (
+	"6.5840/labrpc"
+	"sync/atomic"
+)
 import "time"
 import "crypto/rand"
 import "math/big"
 
+type ClientID int64
 type Clerk struct {
 	servers []*labrpc.ClientEnd
 	// Your data here.
+	seqNum atomic.Int64
+
+	me        ClientID
+	newConfig Config
+	next      int
+	leaderId  int
 }
 
 func nrand() int64 {
@@ -25,77 +35,95 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
 	// Your code here.
+	ck.me = ClientID(nrand())
+	Debug(nil, dInfo, "MakeClerk: %v", ck)
 	return ck
 }
-
-func (ck *Clerk) Query(num int) Config {
-	args := &QueryArgs{}
-	// Your code here.
-	args.Num = num
-	for {
-		// try each known server.
-		for _, srv := range ck.servers {
-			var reply QueryReply
-			ok := srv.Call("ShardCtrler.Query", args, &reply)
-			if ok && reply.WrongLeader == false {
-				return reply.Config
-			}
-		}
-		time.Sleep(100 * time.Millisecond)
+func (ck *Clerk) buildBaseReq() BaseReq {
+	return BaseReq{
+		ClientID: ck.me,
+		SeqNum:   ck.seqNum.Add(1),
 	}
+}
+func (ck *Clerk) Query(num int) Config {
+	args := &OpArgs{
+		BaseReq: ck.buildBaseReq(),
+		Num:     num,
+	}
+	args.Type = Query
+	// Your code here.
+	return ck.op(args).Config
 }
 
 func (ck *Clerk) Join(servers map[int][]string) {
-	args := &JoinArgs{}
-	// Your code here.
-	args.Servers = servers
-
-	for {
-		// try each known server.
-		for _, srv := range ck.servers {
-			var reply JoinReply
-			ok := srv.Call("ShardCtrler.Join", args, &reply)
-			if ok && reply.WrongLeader == false {
-				return
-			}
-		}
-		time.Sleep(100 * time.Millisecond)
+	args := &OpArgs{
+		BaseReq: ck.buildBaseReq(),
+		Servers: servers,
 	}
+	// Your code here.
+	args.Type = Join
+	Debug(nil, dInfo, "Join args: %v", args)
+	ck.op(args)
 }
 
 func (ck *Clerk) Leave(gids []int) {
-	args := &LeaveArgs{}
-	// Your code here.
-	args.GIDs = gids
-
-	for {
-		// try each known server.
-		for _, srv := range ck.servers {
-			var reply LeaveReply
-			ok := srv.Call("ShardCtrler.Leave", args, &reply)
-			if ok && reply.WrongLeader == false {
-				return
-			}
-		}
-		time.Sleep(100 * time.Millisecond)
+	args := &OpArgs{
+		BaseReq: ck.buildBaseReq(),
+		GIDs:    gids,
 	}
+	// Your code here.
+	args.Type = Leave
+
+	ck.op(args)
 }
 
 func (ck *Clerk) Move(shard int, gid int) {
-	args := &MoveArgs{}
-	// Your code here.
-	args.Shard = shard
-	args.GID = gid
-
-	for {
-		// try each known server.
-		for _, srv := range ck.servers {
-			var reply MoveReply
-			ok := srv.Call("ShardCtrler.Move", args, &reply)
-			if ok && reply.WrongLeader == false {
-				return
-			}
-		}
-		time.Sleep(100 * time.Millisecond)
+	args := &OpArgs{
+		BaseReq: ck.buildBaseReq(),
+		Shard:   shard,
+		GID:     gid,
 	}
+	// Your code here.
+	args.Type = Move
+	ck.op(args)
+}
+
+func (ck *Clerk) op(args *OpArgs) OpReply {
+
+	var reply OpReply
+	for {
+
+		Debug(nil, dClient, "call %d server %s begin", ck.getNext(), args)
+
+		var call bool
+		call = ck.servers[ck.getNext()].Call("ShardCtrler.Op", args, &reply)
+		// You will have to modify this function.
+		if !call {
+			Debug(nil, dWarn, "call %v false", ck.getNext())
+			ck.refreshNext()
+			continue
+		}
+
+		Debug(nil, dInfo, "%d call reply %s", ck.getNext(), reply)
+		switch reply.Err {
+		case OK:
+			return reply
+		case TimedOut:
+			ck.refreshNext()
+			time.Sleep(time.Millisecond * 200)
+		default:
+			ck.refreshNext()
+			Debug(nil, dClient, "queryL time out")
+		}
+	}
+}
+func (ck *Clerk) getNext() int {
+	return ck.next
+}
+func (ck *Clerk) setNext(next int) {
+	ck.next = next
+}
+func (ck *Clerk) refreshNext() int {
+	ck.next = int(nrand()) % len(ck.servers)
+	return ck.next
 }

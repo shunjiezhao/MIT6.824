@@ -1,11 +1,13 @@
 package shardctrler
 
-
-import "6.5840/raft"
+import (
+	"6.5840/raft"
+	"fmt"
+	"time"
+)
 import "6.5840/labrpc"
 import "sync"
 import "6.5840/labgob"
-
 
 type ShardCtrler struct {
 	mu      sync.Mutex
@@ -15,31 +17,78 @@ type ShardCtrler struct {
 
 	// Your data here.
 
-	configs []Config // indexed by config num
+	configs    []Config // indexed by config num
+	name       string
+	lastExec   map[ClientID]int64             // 1
+	resultChan map[int]chan OpReply           // 2
+	Result     map[ClientID]map[int64]OpReply // 6
+	Shards     map[int][]int
 }
 
+const (
+	Join uint8 = iota + 1
+	Leave
+	Move
+	Query
+)
 
-type Op struct {
-	// Your data here.
+func copyMap(Servers map[int][]string) map[int][]string {
+	var ans = make(map[int][]string, len(Servers))
+	for key, val := range Servers {
+		var slic = make([]string, len(val))
+		copy(slic, val)
+		ans[key] = slic
+	}
+	return ans
 }
+func (sc *ShardCtrler) Op(args *OpArgs, reply *OpReply) {
+	if args == nil || reply == nil {
+		panic("args or reply is nil")
+	}
+	sc.Lock("OP")
+	defer func() {
+		Debug(sc, dInfo, "OP reply: %v", reply)
+	}()
+	if _, ok := sc.Result[args.ClientID]; !ok {
+		sc.Result[args.ClientID] = map[int64]OpReply{}
+	}
+	// 1. check if already executed
+	clientRes := sc.Result[args.ClientID]
+	if res, ok := clientRes[args.SeqNum]; ok {
+		reply.Err = res.Err
+		reply.Config = res.Config
+		reply.WrongLeader = res.WrongLeader
+		sc.UnLock("OP-result")
+		return
+	}
 
-
-func (sc *ShardCtrler) Join(args *JoinArgs, reply *JoinReply) {
 	// Your code here.
-}
+	Debug(nil, dInfo, "Op args: %s", args)
+	index, _, leader := sc.rf.Start(*args)
+	if !leader {
+		reply.WrongLeader = true
+		sc.UnLock("OP-wrong-leader")
+		return
+	}
 
-func (sc *ShardCtrler) Leave(args *LeaveArgs, reply *LeaveReply) {
-	// Your code here.
+	ch := sc.resultChan[index]
+	if ch == nil {
+		ch = make(chan OpReply)
+		sc.resultChan[index] = ch
+	}
+	panicIf(ch == nil, "ch is nil")
+	sc.UnLock("Join-wait-result")
+	// 3. wait for raft to apply
+	select {
+	case <-time.After(500 * time.Millisecond):
+		reply.Err = TimedOut
+		reply.WrongLeader = true
+	case result := <-sc.resultChan[index]:
+		reply = &result
+	}
+	// 4. return result
+	return
 }
-
-func (sc *ShardCtrler) Move(args *MoveArgs, reply *MoveReply) {
-	// Your code here.
-}
-
-func (sc *ShardCtrler) Query(args *QueryArgs, reply *QueryReply) {
-	// Your code here.
-}
-
 
 // the tester calls Kill() when a ShardCtrler instance won't
 // be needed again. you are not required to do anything
@@ -66,11 +115,31 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister)
 	sc.configs = make([]Config, 1)
 	sc.configs[0].Groups = map[int][]string{}
 
-	labgob.Register(Op{})
+	labgob.Register(OpArgs{})
 	sc.applyCh = make(chan raft.ApplyMsg)
 	sc.rf = raft.Make(servers, me, persister, sc.applyCh)
+	sc.name = fmt.Sprintf("SC-%d", me)
 
 	// Your code here.
+	sc.lastExec = map[ClientID]int64{}               // 1
+	sc.resultChan = make(map[int]chan OpReply)       // 2
+	sc.Result = make(map[ClientID]map[int64]OpReply) // 6
+	sc.Shards = make(map[int][]int)
+	Debug(sc, dInfo, "StartServer me: %v", me)
 
+	go sc.apply()
 	return sc
+}
+
+func (sc *ShardCtrler) Lock(locate string) {
+	micro := time.Now().UnixMicro()
+	Debug(sc, dLock, "Pre-Lock: %v on %v", locate, micro)
+	sc.mu.Lock()
+	Debug(sc, dLock, "Done-Lock: %v on %v", locate, micro)
+}
+func (sc *ShardCtrler) UnLock(locate string) {
+	micro := time.Now().UnixMicro()
+	Debug(sc, dLock, "Pre-UnLock: %v on %v", locate, micro)
+	sc.mu.Unlock()
+	Debug(sc, dLock, "Done-UnLock: %v on %v", locate, micro)
 }
