@@ -59,6 +59,9 @@ func init() {
 }
 
 func Debug(rf *Raft, topic logTopic, format string, a ...interface{}) {
+	if topic == dLock {
+		return
+	}
 	if _debug {
 		time := time.Since(debugStart).Microseconds()
 		time /= 100

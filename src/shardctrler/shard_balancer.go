@@ -60,7 +60,7 @@ func (sc *ShardCtrler) getMinShardCountGIDL() int {
 	count := sc.getExistShardSortKeyL()
 	for _, gid := range count {
 		shards := sc.Shards[gid]
-		if len(shards) < mn {
+		if len(shards) <= mn {
 			mn = len(shards)
 			id = max(gid, id)
 		}
