@@ -11,8 +11,13 @@ import (
 type logTopic string
 
 const (
-	dLock logTopic = "LOCK"
-	dRpc  logTopic = "RPC"
+	dLock  logTopic = "LOCK"
+	dRpc   logTopic = "RPC"
+	dApply logTopic = "APPLY"
+	dChan  logTopic = "CHAN"
+	dInfo  logTopic = "INFO"
+	dTOut  logTopic = "TIMEOUT"
+	dResp  logTopic = "RESP"
 )
 
 // Debugging

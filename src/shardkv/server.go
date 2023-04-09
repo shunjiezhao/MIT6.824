@@ -1,15 +1,12 @@
 package shardkv
 
-import "6.5840/labrpc"
+import (
+	"6.5840/labrpc"
+	"time"
+)
 import "6.5840/raft"
 import "sync"
 import "6.5840/labgob"
-
-type Op struct {
-	// Your definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
-}
 
 type ShardKV struct {
 	mu           sync.Mutex
@@ -20,8 +17,11 @@ type ShardKV struct {
 	gid          int
 	ctrlers      []*labrpc.ClientEnd
 	maxraftstate int // snapshot if log grows this big
+	ResponseCh   map[int]chan OpReply
 
 	// Your definitions here.
+	SingleExec
+	Store
 }
 
 // the tester calls Kill() when a ShardKV instance won't
@@ -62,7 +62,7 @@ func (kv *ShardKV) Kill() {
 func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister, maxraftstate int, gid int, ctrlers []*labrpc.ClientEnd, make_end func(string) *labrpc.ClientEnd) *ShardKV {
 	// call labgob.Register on structures you want
 	// Go's RPC library to marshall/unmarshall.
-	labgob.Register(Op{})
+	labgob.Register(OpArgs{})
 
 	kv := new(ShardKV)
 	kv.me = me
@@ -74,10 +74,27 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister,
 	// Your initialization code here.
 
 	// Use something like this to talk to the shardctrler:
-	// kv.mck = shardctrler.MakeClerk(kv.ctrlers)
+	//kv.mck = shardctrler.MakeClerk(kv.ctrlers)
 
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
+	kv.SingleExec = NewSingleExec()
+	kv.ResponseCh = make(map[int]chan OpReply)
+	kv.Store = newStore()
+	go kv.apply()
 
 	return kv
+}
+
+func (sc *ShardKV) Lock(locate string) {
+	micro := time.Now().UnixMicro()
+	Debug(sc, dLock, "Pre-Lock: %v on %v", locate, micro)
+	sc.mu.Lock()
+	Debug(sc, dLock, "Done-Lock: %v on %v", locate, micro)
+}
+func (sc *ShardKV) UnLock(locate string) {
+	micro := time.Now().UnixMicro()
+	Debug(sc, dLock, "Pre-UnLock: %v on %v", locate, micro)
+	sc.mu.Unlock()
+	Debug(sc, dLock, "Done-UnLock: %v on %v", locate, micro)
 }

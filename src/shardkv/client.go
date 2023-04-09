@@ -57,7 +57,7 @@ func MakeClerk(ctrlers []*labrpc.ClientEnd, make_end func(string) *labrpc.Client
 	ck.sm = shardctrler.MakeClerk(ctrlers)
 	ck.make_end = make_end
 	// You'll have to add code here.
-	ck.ClientID = 0
+	ck.ClientID = ClientID(nrand())
 	return ck
 }
 
@@ -71,7 +71,7 @@ func (ck *Clerk) Op(key string, value string, op string) string {
 	}
 	args.Key = key
 	args.Value = value
-	args.Op = op
+	args.Type = op
 
 	for {
 		shard := key2shard(key)

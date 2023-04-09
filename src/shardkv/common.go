@@ -1,5 +1,7 @@
 package shardkv
 
+import "fmt"
+
 //
 // Sharded key/value server.
 // Lots of replica groups, each running Raft.
@@ -14,6 +16,7 @@ const (
 	ErrNoKey       = "ErrNoKey"
 	ErrWrongGroup  = "ErrWrongGroup"
 	ErrWrongLeader = "ErrWrongLeader"
+	ErrTimeOut     = "ErrTimeOut"
 )
 
 const (
@@ -31,12 +34,20 @@ type BaseReq struct {
 
 type OpArgs struct {
 	BaseReq
-	Op    string
+	Type  string
 	Key   string
 	Value string
+}
+
+func (o OpArgs) String() string {
+	return fmt.Sprintf("ClientID: %v, SeqNum: %v, Type: %v, Key: %v, Value: %v", o.ClientID, o.SeqNum, o.Type, o.Key, o.Value)
 }
 
 type OpReply struct {
 	Err   Err
 	Value string
+}
+
+func (o OpReply) String() string {
+	return fmt.Sprintf("Err: %v, Value: %v", o.Err, o.Value)
 }
