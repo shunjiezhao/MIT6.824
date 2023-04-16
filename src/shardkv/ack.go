@@ -45,6 +45,19 @@ func (sk *ShardKV) Ack(args *AckArgs, reply *AckReply) {
 	}
 }
 
+func (kv *ShardKV) applyAck(args AckArgs) {
+	kv.Lock("applyAck")
+	defer kv.UnLock("applyAck")
+	// 将 Shards
+	if args.ConfigNum != kv.curCfg.Num {
+		// 不是本次的
+		return
+	}
+
+	kv.store[args.Shard].Status = Serveing
+	Debug(kv, dGC, "Ack: %v", args.Shard)
+}
+
 const (
 	GcTimeInterval = time.Millisecond * 25
 )

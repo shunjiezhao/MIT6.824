@@ -139,16 +139,3 @@ func (kv *ShardKV) canServe(shard int) bool {
 	return kv.curCfg.Shards[shard] == kv.gid && (kv.store[shard].Status == Serveing || kv.store[shard].Status == GC)
 
 }
-
-func (kv *ShardKV) applyAck(args AckArgs) {
-	kv.Lock("applyAck")
-	defer kv.UnLock("applyAck")
-	// 将 Shards
-	if args.ConfigNum != kv.curCfg.Num {
-		// 不是本次的
-		return
-	}
-
-	kv.store[args.Shard].Status = Serveing
-	Debug(kv, dGC, "Ack: %v", args.Shard)
-}
