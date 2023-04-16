@@ -2,6 +2,7 @@ package shardkv
 
 import (
 	"6.5840/labrpc"
+	"6.5840/shardctrler"
 	"time"
 )
 import "6.5840/raft"
@@ -17,11 +18,14 @@ type ShardKV struct {
 	gid          int
 	ctrlers      []*labrpc.ClientEnd
 	maxraftstate int // snapshot if log grows this big
-	ResponseCh   map[int]chan OpReply
 
 	// Your definitions here.
-	SingleExec
-	Store
+	lastExec   map[ClientID]int64
+	ResponseCh map[int]chan OpReply
+	store      map[int]*Shard // Shard -> Store
+	sm         *shardctrler.Clerk
+	preCfg     shardctrler.Config // isNew?
+	curCfg     shardctrler.Config
 }
 
 // the tester calls Kill() when a ShardKV instance won't
@@ -55,14 +59,26 @@ func (kv *ShardKV) Kill() {
 // send RPCs. You'll need this to send RPCs to other groups.
 //
 // look at client.go for examples of how to use ctrlers[]
-// and make_end() to send RPCs to the group owning a specific shard.
+// and make_end() to send RPCs to the group owning a specific Shard.
 //
 // StartServer() must return quickly, so it should start goroutines
 // for any long-running work.
-func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister, maxraftstate int, gid int, ctrlers []*labrpc.ClientEnd, make_end func(string) *labrpc.ClientEnd) *ShardKV {
+func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister, maxraftstate int, gid int, ctrlers []*labrpc.ClientEnd,
+	make_end func(string) *labrpc.ClientEnd) *ShardKV {
 	// call labgob.Register on structures you want
 	// Go's RPC library to marshall/unmarshall.
+	labgob.Register(newStore())
+	labgob.Register(Shard{})
+	labgob.Register(shardctrler.Config{})
 	labgob.Register(OpArgs{})
+	labgob.Register(OpReply{})
+	labgob.Register(MoveShardArgs{})
+	labgob.Register(MoveShardReply{})
+	labgob.Register(CMDConfigArgs{})
+	labgob.Register(CMDMoveShardArgs{})
+	labgob.Register(AckArgs{})
+	labgob.Register(AckReply{})
+	labgob.Register(CMDAck{})
 
 	kv := new(ShardKV)
 	kv.me = me
@@ -74,16 +90,36 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister,
 	// Your initialization code here.
 
 	// Use something like this to talk to the shardctrler:
-	//kv.mck = shardctrler.MakeClerk(kv.ctrlers)
+	kv.sm = shardctrler.MakeClerk(kv.ctrlers)
 
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
-	kv.SingleExec = NewSingleExec()
+	kv.lastExec = make(map[ClientID]int64)
 	kv.ResponseCh = make(map[int]chan OpReply)
-	kv.Store = newStore()
-	go kv.apply()
+	kv.store = make(map[int]*Shard)
+	for i := 0; i < shardctrler.NShards; i++ {
+		kv.store[i] = NewShard()
+	}
+
+	kv.curCfg = shardctrler.Config{
+		Num:    0,
+		Shards: [10]int{},
+		Groups: map[int][]string{},
+	}
+	for i := 0; i < shardctrler.NShards; i++ {
+		kv.curCfg.Shards[i] = -1
+	}
+	kv.preCfg = kv.curCfg
+
+	go kv.start()
 
 	return kv
+}
+func (kv *ShardKV) start() {
+	go kv.apply()
+	go kv.ApplyConfig()
+	go kv.shardConsumer()
+	go kv.GCconsumer()
 }
 
 func (sc *ShardKV) Lock(locate string) {
@@ -97,4 +133,22 @@ func (sc *ShardKV) UnLock(locate string) {
 	Debug(sc, dLock, "Pre-UnLock: %v on %v", locate, micro)
 	sc.mu.Unlock()
 	Debug(sc, dLock, "Done-UnLock: %v on %v", locate, micro)
+}
+
+func (kv *ShardKV) canServe(shard int) bool {
+	return kv.curCfg.Shards[shard] == kv.gid && (kv.store[shard].Status == Serveing || kv.store[shard].Status == GC)
+
+}
+
+func (kv *ShardKV) applyAck(args AckArgs) {
+	kv.Lock("applyAck")
+	defer kv.UnLock("applyAck")
+	// 将 Shards
+	if args.ConfigNum != kv.curCfg.Num {
+		// 不是本次的
+		return
+	}
+
+	kv.store[args.Shard].Status = Serveing
+	Debug(kv, dGC, "Ack: %v", args.Shard)
 }

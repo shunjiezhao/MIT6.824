@@ -41,13 +41,14 @@ func copyMap(Servers map[int][]string) map[int][]string {
 	}
 	return ans
 }
+
 func (sc *ShardCtrler) Op(args *OpArgs, reply *OpReply) {
 	if args == nil || reply == nil {
 		panic("args or reply is nil")
 	}
 	sc.Lock("OP")
 	defer func() {
-		Debug(sc, dInfo, "OP reply: %v", reply)
+		Debug(sc, dInfo, "OP args: %s reply: %v", args, reply)
 	}()
 	if _, ok := sc.Result[args.ClientID]; !ok {
 		sc.Result[args.ClientID] = map[int64]OpReply{}
@@ -58,6 +59,7 @@ func (sc *ShardCtrler) Op(args *OpArgs, reply *OpReply) {
 		reply.Err = res.Err
 		reply.Config = res.Config
 		reply.WrongLeader = res.WrongLeader
+		Debug(sc, dInfo, "repeat")
 		sc.UnLock("OP-result")
 		return
 	}
@@ -80,11 +82,14 @@ func (sc *ShardCtrler) Op(args *OpArgs, reply *OpReply) {
 	sc.UnLock("Join-wait-result")
 	// 3. wait for raft to apply
 	select {
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(300 * time.Millisecond):
 		reply.Err = TimedOut
 		reply.WrongLeader = true
 	case result := <-sc.resultChan[index]:
-		reply = &result
+		reply.Err = result.Err
+		reply.Config = result.Config
+		reply.WrongLeader = result.WrongLeader
+		//reply = &result
 	}
 	// 4. return result
 	return

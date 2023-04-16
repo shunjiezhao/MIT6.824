@@ -3,7 +3,7 @@ package shardctrler
 import "fmt"
 
 //
-// Shard controler: assigns shards to replication groups.
+// Shards controler: assigns shards to replication groups.
 //
 // RPC interface:
 // Join(servers) -- add a set of groups (gid -> server-list mapping).
@@ -41,7 +41,7 @@ func (c *Config) getGroupCount() []int {
 
 }
 
-func (c *Config) clone() Config {
+func (c *Config) Clone() Config {
 	c2 := Config{}
 	c2.Num = c.Num
 	c2.Shards = c.Shards
@@ -50,9 +50,8 @@ func (c *Config) clone() Config {
 }
 
 const (
-	OK                = "OK"
-	ConfigNumIsTooBig = "ConfigNumIsTooBig"
-	TimedOut          = "TimedOut"
+	OK       = "OK"
+	TimedOut = "TimedOut"
 )
 
 type Err string
@@ -73,7 +72,7 @@ type OpArgs struct {
 }
 
 func (op OpArgs) String() string {
-	return fmt.Sprintf("ClientID: %v, SeqNum: %v, Type: %v, Servers: %v, GIDs: %v, Shard: %v, GID: %v, Num: %v", op.ClientID, op.SeqNum, op.Type, op.Servers, op.GIDs, op.Shard, op.GID, op.Num)
+	return fmt.Sprintf("ClientID: %v, SeqNum: %v, Type: %v, Servers: %v, GIDs: %v, Shards: %v, GID: %v, Num: %v", op.ClientID, op.SeqNum, op.Type, op.Servers, op.GIDs, op.Shard, op.GID, op.Num)
 }
 
 type OpReply struct {

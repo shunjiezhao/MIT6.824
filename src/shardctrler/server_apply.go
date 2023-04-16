@@ -21,9 +21,11 @@ func (sc *ShardCtrler) consumeOP(msg raft.ApplyMsg) {
 	defer sc.UnLock("consumeOP")
 
 	op := msg.Command.(OpArgs)
+	ch := make(chan OpReply)
+	var reply OpReply
+
 	if sc.lastExec[op.ClientID] < op.SeqNum {
-		var reply OpReply
-		panicIf(op.SeqNum-sc.lastExec[op.ClientID] > 1, "lastExec: %v consumeOP: %v", sc.lastExec[op.ClientID], op)
+		panicIf(op.SeqNum-sc.lastExec[op.ClientID] > 1, "lastExec: %v now: %d consumeOP: %v", sc.lastExec[op.ClientID], op.Num, op)
 		sc.lastExec[op.ClientID] = op.SeqNum
 		switch op.Type {
 		case Join:
@@ -43,19 +45,20 @@ func (sc *ShardCtrler) consumeOP(msg raft.ApplyMsg) {
 			sc.Result[op.ClientID][op.SeqNum] = reply
 		}
 
-		ch := sc.resultChan[msg.CommandIndex]
+		ch = sc.resultChan[msg.CommandIndex]
 		_, isLeader := sc.rf.GetState()
 		if isLeader == false {
 			return
 		}
-
-		go func(reply OpReply) {
-			Debug(sc, dInfo, "send response: %+v", reply)
-			if ch != nil {
-				ch <- reply
-			}
-		}(reply)
+	} else {
+		reply = sc.Result[op.ClientID][op.SeqNum]
 	}
+	go func(reply OpReply) {
+		Debug(sc, dInfo, "send response: %+v", reply)
+		if ch != nil {
+			ch <- reply
+		}
+	}(reply)
 }
 
 func (sc *ShardCtrler) joinL(args OpArgs) OpReply {
@@ -84,7 +87,7 @@ func (sc *ShardCtrler) joinL(args OpArgs) OpReply {
 
 func (sc *ShardCtrler) getNewConfigL() Config {
 	lastConfig := sc.configs[len(sc.configs)-1]
-	newConfig := lastConfig.clone()
+	newConfig := lastConfig.Clone()
 	newConfig.Num++
 	return newConfig
 }
@@ -152,7 +155,7 @@ func (sc *ShardCtrler) queryL(args OpArgs) OpReply {
 		resp.Err = OK
 		return resp
 	}
-
-	resp.Err = ConfigNumIsTooBig
+	resp.Config = sc.configs[idx-1]
+	resp.Err = OK
 	return resp
 }

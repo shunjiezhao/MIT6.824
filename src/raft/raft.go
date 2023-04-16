@@ -21,6 +21,7 @@ import (
 	"6.5840/labgob"
 	"bytes"
 	"fmt"
+	"log"
 
 	//	"bytes"
 	"math/rand"
@@ -55,7 +56,11 @@ type ApplyMsg struct {
 }
 
 func (m ApplyMsg) String() string {
-	return fmt.Sprintf("CommandValid: %v CommandIndex: %v Commanv: %d", m.CommandValid, m.CommandIndex, m.Command)
+	if m.CommandValid {
+		return fmt.Sprintf("ApplyMsg{CommandValid: %v, Command: %v, CommandIndex: %v}", m.CommandValid, m.Command, m.CommandIndex)
+	} else {
+		return fmt.Sprintf("ApplyMsg{SnapshotValid: %v, Snapshot: %v, SnapshotTerm: %v, SnapshotIndex: %v}", m.SnapshotValid, m.Snapshot, m.SnapshotTerm, m.SnapshotIndex)
+	}
 }
 
 // A Go object implementing a single Raft peer.
@@ -166,6 +171,7 @@ func (rf *Raft) getRaftState() []byte {
 		e.Encode(rf.LastIncludedTerm) != nil ||
 		e.Encode(rf.VotedFor) != nil ||
 		e.Encode(rf.Log) != nil {
+		log.Println(e.Encode(rf.Log))
 		panic("decode error")
 	}
 	return w.Bytes()
@@ -386,6 +392,7 @@ func (rf *Raft) Name() string {
 func Make(peers []*labrpc.ClientEnd, me int,
 	persister *Persister, applyCh chan ApplyMsg) *Raft {
 	runtime.GOMAXPROCS(8)
+
 	rf := &Raft{}
 	rf.peers = peers
 	rf.persister = persister
@@ -507,7 +514,6 @@ func (rf *Raft) apply() {
 			msg.Command = rf.Log.entryAt(rf.lastApplied).Command
 			msg.CommandIndex = rf.lastApplied
 		} else {
-			panic("")
 		}
 		appIdx := rf.lastApplied
 		Debug(rf, dClient, "want to apply idx %d Log %+v", rf.lastApplied, rf.Log.entryAt(rf.lastApplied))

@@ -101,7 +101,7 @@ func (ck *Clerk) Op(key string, value string, op string) string {
 			continue
 		}
 
-		Debug(nil, dInfo, "%d call reply %s", ck.getNext(), reply)
+		Debug(nil, dInfo, "%d 1call reply %s", ck.getNext(), reply)
 		switch reply.Status {
 		case OK:
 			ck.setNext(reply.LeaderId)

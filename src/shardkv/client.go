@@ -5,7 +5,7 @@ package shardkv
 //
 // the client first talks to the shardctrler to find out
 // the assignment of shards (keys) to groups, and then
-// talks to the group that holds the key's shard.
+// talks to the group that holds the key's Shards.
 //
 
 import (
@@ -17,7 +17,7 @@ import "math/big"
 import "6.5840/shardctrler"
 import "time"
 
-// which shard is a key in?
+// which Shard is a key in?
 // please use this function,
 // and please do not change it.
 func key2shard(key string) int {
@@ -75,6 +75,7 @@ func (ck *Clerk) Op(key string, value string, op string) string {
 
 	for {
 		shard := key2shard(key)
+		args.Shard = shard
 		gid := ck.config.Shards[shard]
 		if servers, ok := ck.config.Groups[gid]; ok {
 			for si := 0; si < len(servers); si++ {
@@ -85,6 +86,7 @@ func (ck *Clerk) Op(key string, value string, op string) string {
 					return reply.Value
 				}
 				if ok && reply.Err == ErrWrongGroup {
+					Debug(nil, dErr, "WrongGroup: %v %v", reply.Err, ck.config.Num)
 					break
 				}
 				// ... not ok, or ErrWrongLeader

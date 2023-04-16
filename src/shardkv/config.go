@@ -1,6 +1,9 @@
 package shardkv
 
-import "6.5840/shardctrler"
+import (
+	"6.5840/shardctrler"
+	"log"
+)
 import "6.5840/labrpc"
 import "testing"
 import "os"
@@ -109,7 +112,7 @@ func (cfg *config) ctrlername(i int) string {
 	return "ctrler" + strconv.Itoa(i)
 }
 
-// shard server name for labrpc.
+// Shard server name for labrpc.
 // i'th server of group gid.
 func (cfg *config) servername(gid int, i int) string {
 	return "server-" + strconv.Itoa(gid) + "-" + strconv.Itoa(i)
@@ -158,6 +161,7 @@ func (cfg *config) ShutdownServer(gi int, i int) {
 	defer cfg.mu.Unlock()
 
 	gg := cfg.groups[gi]
+	log.Println("shutdown server", gg.gid)
 
 	// prevent this server from sending
 	for j := 0; j < len(gg.servers); j++ {

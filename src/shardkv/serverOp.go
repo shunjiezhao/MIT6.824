@@ -1,14 +1,15 @@
 package shardkv
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 func (kv *ShardKV) Op(args *OpArgs, reply *OpReply) {
+
 	if args == nil || reply == nil {
 		panic("args or reply is nil")
 	}
-
-	Debug(kv, dRpc, "Type: %v", args)
-	kv.Lock("Op")
 
 	var (
 		index  int
@@ -16,13 +17,20 @@ func (kv *ShardKV) Op(args *OpArgs, reply *OpReply) {
 		ch     chan OpReply
 	)
 	cpArgs := *args
-	if res, ok := kv.SingleExec.GetIfExec(cpArgs); ok {
-		reply.Err = res.(OpReply).Err
-		reply.Value = res.(OpReply).Value
+
+	Debug(kv, dRpc, "receive req: %s", args)
+	kv.Lock("Op")
+	fmt.Println(0)
+	if args.Shard < 0 || kv.lastExec[args.ClientID] >= args.SeqNum { // 执行过了
+		Debug(kv, dErr, "me: %d wrong group: %v", kv.gid, args)
+		reply.Err = OK
 		goto done
 	}
+	fmt.Println(1)
 
 	index, _, leader = kv.rf.Start(cpArgs)
+	fmt.Println(2)
+
 	if !leader {
 		reply.Err = ErrWrongLeader
 		goto done
@@ -51,7 +59,6 @@ func (kv *ShardKV) Op(args *OpArgs, reply *OpReply) {
 		reply.Err = resp.Err
 		reply.Value = resp.Value
 	}
-	Debug(kv, dResp, "%s index: %v leader: %v", reply, index, leader)
 	return
 done:
 	kv.UnLock("Op")

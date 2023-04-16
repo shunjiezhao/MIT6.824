@@ -11,13 +11,17 @@ import (
 type logTopic string
 
 const (
-	dLock  logTopic = "LOCK"
-	dRpc   logTopic = "RPC"
-	dApply logTopic = "APPLY"
-	dChan  logTopic = "CHAN"
-	dInfo  logTopic = "INFO"
-	dTOut  logTopic = "TIMEOUT"
-	dResp  logTopic = "RESP"
+	dLock   logTopic = "LOCK"
+	dRpc    logTopic = "RPC"
+	dApply  logTopic = "APPLY"
+	dChan   logTopic = "CHAN"
+	dInfo   logTopic = "INFO"
+	dTOut   logTopic = "TIMEOUT"
+	dResp   logTopic = "RESP"
+	dErr    logTopic = "ERROR"
+	dConfig logTopic = "CONFIG"
+	dShard  logTopic = "SHARD"
+	dGC     logTopic = "GC"
 )
 
 // Debugging
@@ -54,7 +58,7 @@ func Debug(sc *ShardKV, topic logTopic, format string, a ...interface{}) {
 		time /= 100
 		prefix := fmt.Sprintf("%06d %v ", time, string(topic))
 		if sc != nil {
-			prefix += fmt.Sprintf("SKV-%d ", sc.me)
+			prefix += fmt.Sprintf("SKV-%d gid: %v ", sc.me, sc.gid)
 		}
 		format = prefix + format
 		log.Printf(format, a...)
@@ -65,4 +69,13 @@ func panicIf(cond bool, format string, a ...interface{}) {
 	if cond {
 		panic(fmt.Sprintf(format, a...))
 	}
+}
+func copyMap(Servers map[int][]string) map[int][]string {
+	var ans = make(map[int][]string, len(Servers))
+	for key, val := range Servers {
+		var slic = make([]string, len(val))
+		copy(slic, val)
+		ans[key] = slic
+	}
+	return ans
 }

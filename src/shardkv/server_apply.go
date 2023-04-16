@@ -4,15 +4,44 @@ import (
 	"6.5840/raft"
 )
 
+// deamon
 func (sc *ShardKV) apply() {
 	for msg := range sc.applyCh {
 		Debug(sc, dApply, "apply msg: %v", msg)
 		switch msg.CommandValid {
 		case msg.SnapshotValid:
 		case msg.CommandValid:
-			sc.consumeOP(msg)
+			switch msg.Command.(type) {
+			case CMDConfigArgs:
+				sc.configProducerC(msg.Command.(CMDConfigArgs).Clone())
+			case CMDMoveShardArgs:
+				sc.applyShardDataC(msg.Command.(CMDMoveShardArgs).Clone())
+			case CMDAck:
+				sc.applyAckCmd(msg.Command.(CMDAck))
+			case AckArgs:
+				sc.applyAck(msg.Command.(AckArgs))
+
+			default:
+				sc.consumeOP(msg)
+			}
 		}
 	}
+}
+
+func (sc *ShardKV) applyAckCmd(args CMDAck) {
+	sc.Lock("apply ack")
+	defer sc.UnLock("apply ack")
+	Debug(sc, dInfo, "apply ack: %+v", args)
+	// 将 Shards
+	if args.ConfigNum != sc.curCfg.Num {
+		// 不是本次的
+		return
+	}
+	// 是本次的
+	status := sc.store[args.Shard].Status
+	panicIf(status != Serveing && status != GC, "status is not valid in this preCfg")
+	sc.store[args.Shard].Status = Serveing
+	Debug(sc, dShard, "change Shards status->%s", Serveing)
 }
 
 func (sc *ShardKV) consumeOP(msg raft.ApplyMsg) {
@@ -20,12 +49,14 @@ func (sc *ShardKV) consumeOP(msg raft.ApplyMsg) {
 	defer sc.UnLock("consumeOP")
 
 	op := msg.Command.(OpArgs)
-	if sc.IxExec(msg.Command) {
+	if sc.lastExec[op.ClientID] >= op.SeqNum {
+		Debug(sc, dInfo, "already executed: %+v", op)
 		return
 	}
 
 	var reply OpReply
-	sc.Exec(msg.Command, func() any {
+	if sc.canServe(op.Shard) {
+		Debug(sc, dInfo, "can serve: %+v", op)
 		switch op.Type {
 		case Get:
 			reply = sc.getL(op)
@@ -34,8 +65,11 @@ func (sc *ShardKV) consumeOP(msg raft.ApplyMsg) {
 		case Append:
 			reply = sc.appendL(op)
 		}
-		return reply
-	})
+		sc.lastExec[op.ClientID] = op.SeqNum
+	} else {
+		Debug(sc, dInfo, "can not serve: status: %s cfg: %+v op: %s", sc.store[op.Shard].Status, sc.curCfg, op)
+		reply.Err = ErrWrongGroup
+	}
 
 	ch := sc.ResponseCh[msg.CommandIndex]
 	_, isLeader := sc.rf.GetState()
@@ -52,7 +86,7 @@ func (sc *ShardKV) consumeOP(msg raft.ApplyMsg) {
 }
 
 func (sc *ShardKV) getL(op OpArgs) OpReply {
-	value, err := sc.Get(op.Key)
+	value, err := sc.store[op.Shard].Get(op.Key)
 	reply := OpReply{
 		Value: value,
 	}
@@ -65,7 +99,7 @@ func (sc *ShardKV) getL(op OpArgs) OpReply {
 }
 
 func (sc *ShardKV) putL(op OpArgs) OpReply {
-	err := sc.Put(op.Key, op.Value)
+	err := sc.store[op.Shard].Put(op.Key, op.Value)
 	panicIf(err != nil, "putL: %v", err)
 	return OpReply{
 		Err: OK,
@@ -73,7 +107,7 @@ func (sc *ShardKV) putL(op OpArgs) OpReply {
 }
 
 func (sc *ShardKV) appendL(op OpArgs) OpReply {
-	err := sc.Append(op.Key, op.Value)
+	err := sc.store[op.Shard].Append(op.Key, op.Value)
 	panicIf(err != nil, "appendL: %v", err)
 	return OpReply{
 		Err: OK,
