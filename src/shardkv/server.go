@@ -26,6 +26,7 @@ type ShardKV struct {
 	sm         *shardctrler.Clerk
 	preCfg     shardctrler.Config // isNew?
 	curCfg     shardctrler.Config
+	persister  *raft.Persister
 }
 
 // the tester calls Kill() when a ShardKV instance won't
@@ -91,6 +92,7 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister,
 
 	// Use something like this to talk to the shardctrler:
 	kv.sm = shardctrler.MakeClerk(kv.ctrlers)
+	kv.persister = persister
 
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
@@ -111,8 +113,9 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister,
 	}
 	kv.preCfg = kv.curCfg
 
-	go kv.start()
-
+	kv.start()
+	snapshot := persister.ReadSnapshot()
+	kv.InstallSnapshot(snapshot)
 	return kv
 }
 func (kv *ShardKV) start() {

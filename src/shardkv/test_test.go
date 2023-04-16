@@ -16,77 +16,77 @@ func check(t *testing.T, ck *Clerk, key string, value string) {
 	}
 }
 
-//// test static 2-way sharding, without Shards movement.
-//func TestStaticShards(t *testing.T) {
-//	fmt.Printf("Test: static shards ...\n")
-//
-//	cfg := make_config(t, 3, false, -1)
-//	defer cfg.cleanup()
-//
-//	ck := cfg.makeClient()
-//
-//	cfg.join(0)
-//	cfg.join(1)
-//
-//	n := 10
-//	ka := make([]string, n)
-//	va := make([]string, n)
-//	for i := 0; i < n; i++ {
-//		ka[i] = strconv.Itoa(i) // ensure multiple shards
-//		va[i] = randstring(20)
-//		ck.Put(ka[i], va[i])
-//	}
-//	for i := 0; i < n; i++ {
-//		check(t, ck, ka[i], va[i])
-//	}
-//
-//	// make sure that the data really is sharded by
-//	// shutting down one Shards and checking that some
-//	// Get()s don't succeed.
-//	cfg.ShutdownGroup(1)
-//	cfg.checklogs() // forbid snapshots
-//
-//	ch := make(chan string)
-//	for xi := 0; xi < n; xi++ {
-//		ck1 := cfg.makeClient() // only one call allowed per client
-//		go func(i int) {
-//			v := ck1.Get(ka[i])
-//			if v != va[i] {
-//				ch <- fmt.Sprintf("Get(%v): expected:\n%v\nreceived:\n%v", ka[i], va[i], v)
-//			} else {
-//				ch <- ""
-//			}
-//		}(xi)
-//	}
-//
-//	// wait a bit, only about half the Gets should succeed.
-//	ndone := 0
-//	done := false
-//	for done == false {
-//		select {
-//		case err := <-ch:
-//			if err != "" {
-//				t.Fatal(err)
-//			}
-//			ndone += 1
-//		case <-time.After(time.Second * 2):
-//			done = true
-//			break
-//		}
-//	}
-//
-//	if ndone != 5 {
-//		t.Fatalf("expected 5 completions with one Shards dead; got %v\n", ndone)
-//	}
-//
-//	// bring the crashed Shards/group back to life.
-//	cfg.StartGroup(1)
-//	for i := 0; i < n; i++ {
-//		check(t, ck, ka[i], va[i])
-//	}
-//
-//	fmt.Printf("  ... Passed\n")
-//}
+// test static 2-way sharding, without Shards movement.
+func TestStaticShards(t *testing.T) {
+	fmt.Printf("Test: static shards ...\n")
+
+	cfg := make_config(t, 3, false, -1)
+	defer cfg.cleanup()
+
+	ck := cfg.makeClient()
+
+	cfg.join(0)
+	cfg.join(1)
+
+	n := 10
+	ka := make([]string, n)
+	va := make([]string, n)
+	for i := 0; i < n; i++ {
+		ka[i] = strconv.Itoa(i) // ensure multiple shards
+		va[i] = randstring(20)
+		ck.Put(ka[i], va[i])
+	}
+	for i := 0; i < n; i++ {
+		check(t, ck, ka[i], va[i])
+	}
+
+	// make sure that the data really is sharded by
+	// shutting down one Shards and checking that some
+	// Get()s don't succeed.
+	cfg.ShutdownGroup(1)
+	cfg.checklogs() // forbid snapshots
+
+	ch := make(chan string)
+	for xi := 0; xi < n; xi++ {
+		ck1 := cfg.makeClient() // only one call allowed per client
+		go func(i int) {
+			v := ck1.Get(ka[i])
+			if v != va[i] {
+				ch <- fmt.Sprintf("Get(%v): expected:\n%v\nreceived:\n%v", ka[i], va[i], v)
+			} else {
+				ch <- ""
+			}
+		}(xi)
+	}
+
+	// wait a bit, only about half the Gets should succeed.
+	ndone := 0
+	done := false
+	for done == false {
+		select {
+		case err := <-ch:
+			if err != "" {
+				t.Fatal(err)
+			}
+			ndone += 1
+		case <-time.After(time.Second * 2):
+			done = true
+			break
+		}
+	}
+
+	if ndone != 5 {
+		t.Fatalf("expected 5 completions with one Shards dead; got %v\n", ndone)
+	}
+
+	// bring the crashed Shards/group back to life.
+	cfg.StartGroup(1)
+	for i := 0; i < n; i++ {
+		check(t, ck, ka[i], va[i])
+	}
+
+	fmt.Printf("  ... Passed\n")
+}
 
 func TestJoinLeave(t *testing.T) {
 	fmt.Printf("Test: join then leave ...\n")
@@ -146,75 +146,74 @@ func TestJoinLeave(t *testing.T) {
 	fmt.Printf("  ... Passed\n")
 }
 
-//
-//func TestSnapshot(t *testing.T) {
-//	fmt.Printf("Test: snapshots, join, and leave ...\n")
-//
-//	cfg := make_config(t, 3, false, 1000)
-//	defer cfg.cleanup()
-//
-//	ck := cfg.makeClient()
-//
-//	cfg.join(0)
-//
-//	n := 30
-//	ka := make([]string, n)
-//	va := make([]string, n)
-//	for i := 0; i < n; i++ {
-//		ka[i] = strconv.Itoa(i) // ensure multiple shards
-//		va[i] = randstring(20)
-//		ck.Put(ka[i], va[i])
-//	}
-//	for i := 0; i < n; i++ {
-//		check(t, ck, ka[i], va[i])
-//	}
-//
-//	cfg.join(1)
-//	cfg.join(2)
-//	cfg.leave(0)
-//
-//	for i := 0; i < n; i++ {
-//		check(t, ck, ka[i], va[i])
-//		x := randstring(20)
-//		ck.Append(ka[i], x)
-//		va[i] += x
-//	}
-//
-//	cfg.leave(1)
-//	cfg.join(0)
-//
-//	for i := 0; i < n; i++ {
-//		check(t, ck, ka[i], va[i])
-//		x := randstring(20)
-//		ck.Append(ka[i], x)
-//		va[i] += x
-//	}
-//
-//	time.Sleep(1 * time.Second)
-//
-//	for i := 0; i < n; i++ {
-//		check(t, ck, ka[i], va[i])
-//	}
-//
-//	time.Sleep(1 * time.Second)
-//
-//	cfg.checklogs()
-//
-//	cfg.ShutdownGroup(0)
-//	cfg.ShutdownGroup(1)
-//	cfg.ShutdownGroup(2)
-//
-//	cfg.StartGroup(0)
-//	cfg.StartGroup(1)
-//	cfg.StartGroup(2)
-//
-//	for i := 0; i < n; i++ {
-//		check(t, ck, ka[i], va[i])
-//	}
-//
-//	fmt.Printf("  ... Passed\n")
-//}
-//
+func TestSnapshot(t *testing.T) {
+	fmt.Printf("Test: snapshots, join, and leave ...\n")
+
+	cfg := make_config(t, 3, false, 1000)
+	defer cfg.cleanup()
+
+	ck := cfg.makeClient()
+
+	cfg.join(0)
+
+	n := 30
+	ka := make([]string, n)
+	va := make([]string, n)
+	for i := 0; i < n; i++ {
+		ka[i] = strconv.Itoa(i) // ensure multiple shards
+		va[i] = randstring(20)
+		ck.Put(ka[i], va[i])
+	}
+	for i := 0; i < n; i++ {
+		check(t, ck, ka[i], va[i])
+	}
+
+	cfg.join(1)
+	cfg.join(2)
+	cfg.leave(0)
+
+	for i := 0; i < n; i++ {
+		check(t, ck, ka[i], va[i])
+		x := randstring(20)
+		ck.Append(ka[i], x)
+		va[i] += x
+	}
+
+	cfg.leave(1)
+	cfg.join(0)
+
+	for i := 0; i < n; i++ {
+		check(t, ck, ka[i], va[i])
+		x := randstring(20)
+		ck.Append(ka[i], x)
+		va[i] += x
+	}
+
+	time.Sleep(1 * time.Second)
+
+	for i := 0; i < n; i++ {
+		check(t, ck, ka[i], va[i])
+	}
+
+	time.Sleep(1 * time.Second)
+
+	cfg.checklogs()
+
+	cfg.ShutdownGroup(0)
+	cfg.ShutdownGroup(1)
+	cfg.ShutdownGroup(2)
+
+	cfg.StartGroup(0)
+	cfg.StartGroup(1)
+	cfg.StartGroup(2)
+
+	for i := 0; i < n; i++ {
+		check(t, ck, ka[i], va[i])
+	}
+
+	fmt.Printf("  ... Passed\n")
+}
+
 //func TestMissChange(t *testing.T) {
 //	fmt.Printf("Test: servers miss configuration changes...\n")
 //

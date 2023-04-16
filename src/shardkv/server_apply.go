@@ -8,9 +8,9 @@ import (
 func (sc *ShardKV) apply() {
 	for msg := range sc.applyCh {
 		Debug(sc, dApply, "apply msg: %v", msg)
-		switch msg.CommandValid {
-		case msg.SnapshotValid:
-		case msg.CommandValid:
+		if msg.SnapshotValid == true {
+			sc.InstallSnapshot(msg.Snapshot)
+		} else if msg.CommandValid == true {
 			switch msg.Command.(type) {
 			case CMDConfigArgs:
 				sc.configProducerC(msg.Command.(CMDConfigArgs).Clone())
@@ -24,6 +24,8 @@ func (sc *ShardKV) apply() {
 			default:
 				sc.consumeOP(msg)
 			}
+		} else {
+			panic("invalid msg")
 		}
 	}
 }
@@ -72,6 +74,9 @@ func (sc *ShardKV) consumeOP(msg raft.ApplyMsg) {
 	}
 
 	ch := sc.ResponseCh[msg.CommandIndex]
+	if sc.shouldSnapShotL() {
+		sc.rf.Snapshot(msg.CommandIndex, sc.GetSnapshot())
+	}
 	_, isLeader := sc.rf.GetState()
 	if isLeader == false {
 		return
