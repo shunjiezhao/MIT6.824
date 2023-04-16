@@ -82,10 +82,10 @@ func (sc *ShardCtrler) Op(args *OpArgs, reply *OpReply) {
 	sc.UnLock("Join-wait-result")
 	// 3. wait for raft to apply
 	select {
-	case <-time.After(300 * time.Millisecond):
+	case <-time.After(500 * time.Millisecond):
 		reply.Err = TimedOut
 		reply.WrongLeader = true
-	case result := <-sc.resultChan[index]:
+	case result := <-ch:
 		reply.Err = result.Err
 		reply.Config = result.Config
 		reply.WrongLeader = result.WrongLeader

@@ -27,7 +27,7 @@ func (s ShardStatus) String() string {
 }
 
 type Shard struct {
-	Store  Store
+	Store  store
 	Status ShardStatus
 }
 
@@ -50,6 +50,9 @@ func (s *Shard) Append(key, value string) error {
 	return s.Store.Append(key, value)
 }
 
-func (s *Shard) Clone() Store {
-	return s.Store.Clone()
+func (s *Shard) Clone() Shard {
+	return Shard{
+		Store:  s.Store.Clone(),
+		Status: s.Status,
+	}
 }

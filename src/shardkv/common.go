@@ -22,7 +22,7 @@ const (
 	ErrTimeOut           = "ErrTimeOut"
 	ErrNotMatchConfigNum = "ErrNotMatchConfigNum"
 	ErrSendLog           = "ErrSendLog"
-	ErrLow               = "ErrLOw"
+	ErrHigh              = "ErrHigh"
 )
 
 const (
@@ -47,7 +47,7 @@ type OpArgs struct {
 	Shard int
 }
 
-func (o OpArgs) String() string {
+func (o *OpArgs) String() string {
 	return fmt.Sprintf("BaseReq: %v, Type: %v, Key: %v, Value: %v, Shards: %v", o.BaseReq, o.Type, o.Key, o.Value, o.Shard)
 }
 
@@ -56,7 +56,7 @@ type OpReply struct {
 	Value string
 }
 
-func (o OpReply) String() string {
+func (o *OpReply) String() string {
 	return fmt.Sprintf("Err: %v, Value: %v", o.Err, o.Value)
 }
 
@@ -64,25 +64,20 @@ type CMDConfigArgs struct {
 	Config shardctrler.Config
 }
 
-func (x CMDConfigArgs) Clone() CMDConfigArgs {
-	return CMDConfigArgs{
+func (x *CMDConfigArgs) Clone() *CMDConfigArgs {
+	return &CMDConfigArgs{
 		Config: x.Config.Clone(),
 	}
 }
 
 type CMDMoveShardArgs struct {
-	Shards int
+	Shards []int
 	*MoveShardReply
 }
 
-func (x CMDMoveShardArgs) Clone() CMDMoveShardArgs {
-	return CMDMoveShardArgs{
+func (x *CMDMoveShardArgs) Clone() *CMDMoveShardArgs {
+	return &CMDMoveShardArgs{
 		Shards:         x.Shards,
 		MoveShardReply: x.MoveShardReply.Clone(),
 	}
-}
-
-type CMDAck struct {
-	Shard     int
-	ConfigNum int
 }

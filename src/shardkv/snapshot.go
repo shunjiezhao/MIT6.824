@@ -13,6 +13,9 @@ func (kv *ShardKV) shouldSnapShotL() bool {
 }
 
 func (kv *ShardKV) GetSnapshot() []byte {
+	kv.Lock("snapshot")
+	defer kv.UnLock("snapshot")
+
 	w := new(bytes.Buffer)
 	e := labgob.NewEncoder(w)
 	if e.Encode(kv.preCfg) != nil ||
@@ -25,6 +28,8 @@ func (kv *ShardKV) GetSnapshot() []byte {
 }
 
 func (kv *ShardKV) InstallSnapshot(b []byte) {
+	kv.Lock("snapshot")
+	defer kv.UnLock("snapshot")
 	if len(b) == 0 {
 		return
 	}

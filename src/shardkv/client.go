@@ -81,7 +81,12 @@ func (ck *Clerk) Op(key string, value string, op string) string {
 			for si := 0; si < len(servers); si++ {
 				srv := ck.make_end(servers[si])
 				var reply OpReply
-				ok := srv.Call("ShardKV.Op", &args, &reply)
+				Debug(nil, dInfo, "call group %d", gid)
+				ok = srv.Call("ShardKV.Op", &args, &reply)
+				if !ok {
+					continue
+				}
+
 				if ok && reply.Err == OK {
 					return reply.Value
 				}

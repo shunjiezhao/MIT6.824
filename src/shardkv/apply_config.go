@@ -3,48 +3,32 @@ package shardkv
 import (
 	"6.5840/shardctrler"
 	"fmt"
-	"time"
-)
-
-const (
-	PollInterval           = time.Millisecond * 25
-	ConfigConsumerInterval = time.Millisecond * 25
 )
 
 // deamon
-func (sk *ShardKV) ApplyConfig() {
-	for {
-		time.Sleep(PollInterval)
-		_, leader := sk.rf.GetState()
-		if !leader {
-			continue
-		}
-		sk.Lock("check pull Shards")
-		if len(sk.getShardByStateL(Serveing)) != shardctrler.NShards {
-			Debug(sk, dInfo, "check pull Shards %+v", sk.getShardByStateL(Delete))
-			Debug(sk, dInfo, "now: %+v pre: %+v", sk.curCfg, sk.preCfg)
-			sk.UnLock("check pull Shards")
-			continue
-		}
+func (sk *ShardKV) PullConfig() {
+	sk.Lock("check pull Shards")
+	nextNum := sk.curCfg.Num + 1
+
+	if len(sk.getShardByStateL(Serveing)) != shardctrler.NShards {
+		Debug(sk, dInfo, "now: %+v \npre: %+v \n status: %s\n", sk.curCfg, sk.preCfg, sk.ShardStatus())
 		sk.UnLock("check pull Shards")
-		Debug(sk, dConfig, "try config num %+v\n", sk.curCfg.Num+1)
-		newConfig := sk.sm.Query(sk.curCfg.Num + 1)
-		Debug(sk, dInfo, "pull config  %+v\n ", newConfig)
-		sk.Lock("check pull preCfg num")
-		if newConfig.Num == sk.curCfg.Num+1 {
-			cfg := newConfig.Clone()
-			args := CMDConfigArgs{cfg}
-			index, term, leader := sk.rf.Start(args)
-			if leader {
-				Debug(sk, dApply, "apply new config %v index:%v term:%v leader:%v", cfg, index, term, leader)
-			}
-		}
-		sk.UnLock("check pull preCfg num")
+		return
 	}
-	Debug(sk, dErr, "apply done")
+	sk.UnLock("check pull Shards")
+
+	newConfig := sk.sm.Query(nextNum)
+	Debug(sk, dInfo, "pull config  %+v\n ", newConfig)
+	if newConfig.Num == nextNum {
+		newConfig = newConfig.Clone()
+		args := &CMDConfigArgs{
+			Config: newConfig,
+		}
+		sk.Exec(args, &OpReply{})
+	}
 }
 
-func (sc *ShardKV) configProducerC(cfg CMDConfigArgs) {
+func (sc *ShardKV) configProducerC(cfg *CMDConfigArgs, reply *OpReply) {
 	sc.Lock("apply preCfg")
 	defer sc.UnLock("apply preCfg")
 
@@ -52,16 +36,18 @@ func (sc *ShardKV) configProducerC(cfg CMDConfigArgs) {
 
 	if sc.curCfg.Num+1 != cfg.Config.Num {
 		Debug(sc, dTOut, "正在拉取配置，不需要更新")
+		reply.Err = ErrNotMatchConfigNum
 		return
 	}
 
 	//panicIf(cfg.Config.Num != sc.preCfg.Num+1, fmt.Sprintf("preCfg num not match %v", sc.curCfg.Num)) // preCfg = curCfg
 	// 更新拉取配置信息，以及自己不服务的分片信息
-	Debug(sc, dConfig, "update pull config:%+v[%d] num:{%s}", cfg.Config, sc.curCfg.Num, cfg.Config.Num)
+	Debug(sc, dConfig, "update pull config:%+v[%d] num:{%v}", cfg.Config, sc.curCfg.Num, cfg.Config.Num)
 
 	sc.preCfg = sc.curCfg // swap
 	sc.curCfg = cfg.Config
 
+	reply.Err = OK
 	panicIf(sc.curCfg.Num != sc.preCfg.Num+1, fmt.Sprintf("config num not match pull:%v now:%v", sc.curCfg.Num, sc.preCfg.Num))
 	if sc.curCfg.Num != 1 {
 		var nowMes = make([]int, 0)
