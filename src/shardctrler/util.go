@@ -1,4 +1,4 @@
-package raft
+package shardctrler
 
 import (
 	"fmt"
@@ -34,7 +34,7 @@ const (
 )
 
 // Debugging
-var _debug = false
+var _debug = true
 
 var debugStart time.Time
 var debugVerbosity int
@@ -58,7 +58,7 @@ func init() {
 	log.SetFlags(log.Flags() &^ (log.Ldate | log.Ltime))
 }
 
-func Debug(rf *Raft, topic logTopic, format string, a ...interface{}) {
+func Debug(sc *ShardCtrler, topic logTopic, format string, a ...interface{}) {
 	if topic == dLock {
 		return
 	}
@@ -66,16 +66,20 @@ func Debug(rf *Raft, topic logTopic, format string, a ...interface{}) {
 		time := time.Since(debugStart).Microseconds()
 		time /= 100
 		prefix := fmt.Sprintf("%06d %v ", time, string(topic))
-		if rf != nil {
-			prefix += rf.name + " "
+		if sc != nil {
+			prefix += sc.name + " "
 		}
 		format = prefix + format
-		if rf == nil || rf.killed() == false {
-			log.Printf(format, a...)
-		}
+		log.Printf(format, a...)
 	}
 }
 
 func getServerName(me int) string {
 	return fmt.Sprintf("S%d", me)
+}
+
+func panicIf(cond bool, format string, a ...interface{}) {
+	if cond {
+		panic(fmt.Sprintf(format, a...))
+	}
 }

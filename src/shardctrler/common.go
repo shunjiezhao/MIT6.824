@@ -1,5 +1,7 @@
 package shardctrler
 
+import "fmt"
+
 //
 // Shard controler: assigns shards to replication groups.
 //
@@ -28,46 +30,69 @@ type Config struct {
 	Groups map[int][]string // gid -> servers[]
 }
 
+func (c *Config) getGroupCount() []int {
+	var ans []int
+	for gid, shards := range c.Groups {
+		if len(shards) > 0 {
+			ans = append(ans, gid)
+		}
+	}
+	return ans
+
+}
+
+func (c *Config) clone() Config {
+	c2 := Config{}
+	c2.Num = c.Num
+	c2.Shards = c.Shards
+	c2.Groups = copyMap(c.Groups)
+	return c2
+}
+
 const (
-	OK = "OK"
+	OK                = "OK"
+	ConfigNumIsTooBig = "ConfigNumIsTooBig"
+	TimedOut          = "TimedOut"
 )
 
 type Err string
 
-type JoinArgs struct {
-	Servers map[int][]string // new GID -> servers mappings
+type BaseReq struct {
+	ClientID ClientID
+	SeqNum   int64
+	Type     uint8
 }
 
-type JoinReply struct {
-	WrongLeader bool
+type OpArgs struct {
+	Servers map[int][]string // new GID -> servers mappings [Join]
+	GIDs    []int            // GIDs to leaveL [Leave]
+	Shard   int              // shard to moveL [Move]
+	GID     int              // GID to moveL to [Move]
+	Num     int              // desired config number [Query]
+	BaseReq
+}
+
+func (op OpArgs) String() string {
+	return fmt.Sprintf("ClientID: %v, SeqNum: %v, Type: %v, Servers: %v, GIDs: %v, Shard: %v, GID: %v, Num: %v", op.ClientID, op.SeqNum, op.Type, op.Servers, op.GIDs, op.Shard, op.GID, op.Num)
+}
+
+type OpReply struct {
+	Config      Config // config number [Query]
 	Err         Err
-}
-
-type LeaveArgs struct {
-	GIDs []int
-}
-
-type LeaveReply struct {
 	WrongLeader bool
-	Err         Err
+}
+
+func (op OpReply) String() string {
+	return fmt.Sprintf("Config: %v, Err: %v, WrongLeader: %v", op.Config, op.Err, op.WrongLeader)
 }
 
 type MoveArgs struct {
-	Shard int
-	GID   int
+	GID   int // GID to moveL to [Move]
+	Shard int // shard to moveL [Move]
+	BaseReq
 }
 
 type MoveReply struct {
-	WrongLeader bool
 	Err         Err
-}
-
-type QueryArgs struct {
-	Num int // desired config number
-}
-
-type QueryReply struct {
 	WrongLeader bool
-	Err         Err
-	Config      Config
 }

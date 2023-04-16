@@ -2,6 +2,7 @@ package shardctrler
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"testing"
 	"time"
@@ -54,6 +55,8 @@ func check(t *testing.T, groups []int, ck *Clerk) {
 }
 
 func check_same_config(t *testing.T, c1 Config, c2 Config) {
+	log.Printf("%+v\n", c1)
+	log.Printf("%+v\n", c2)
 	if c1.Num != c2.Num {
 		t.Fatalf("Num wrong")
 	}
@@ -85,7 +88,7 @@ func TestBasic(t *testing.T) {
 
 	ck := cfg.makeClient(cfg.All())
 
-	fmt.Printf("Test: Basic leave/join ...\n")
+	fmt.Printf("Test: Basic leaveL/join ...\n")
 
 	cfa := make([]Config, 6)
 	cfa[0] = ck.Query(-1)
@@ -180,7 +183,7 @@ func TestBasic(t *testing.T) {
 	}
 	fmt.Printf("  ... Passed\n")
 
-	fmt.Printf("Test: Concurrent leave/join ...\n")
+	fmt.Printf("Test: Concurrent leaveL/join ...\n")
 
 	const npara = 10
 	var cka [npara]*Clerk
@@ -257,7 +260,7 @@ func TestMulti(t *testing.T) {
 
 	ck := cfg.makeClient(cfg.All())
 
-	fmt.Printf("Test: Multi-group join/leave ...\n")
+	fmt.Printf("Test: Multi-group join/leaveL ...\n")
 
 	cfa := make([]Config, 6)
 	cfa[0] = ck.Query(-1)
@@ -306,7 +309,7 @@ func TestMulti(t *testing.T) {
 
 	fmt.Printf("  ... Passed\n")
 
-	fmt.Printf("Test: Concurrent multi leave/join ...\n")
+	fmt.Printf("Test: Concurrent multi leaveL/join ...\n")
 
 	const npara = 10
 	var cka [npara]*Clerk
@@ -388,6 +391,7 @@ func TestMulti(t *testing.T) {
 	c := ck.Query(-1) // Config leader claims
 
 	cfg.ShutdownServer(leader)
+	fmt.Println("leader:", leader)
 
 	attempts := 0
 	for isLeader, leader = cfg.Leader(); isLeader; time.Sleep(1 * time.Second) {
