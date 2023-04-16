@@ -1,4 +1,4 @@
-package shardctrler
+package shardkv
 
 import (
 	"fmt"
@@ -11,26 +11,17 @@ import (
 type logTopic string
 
 const (
-	dClient  logTopic = "CLNT"
-	dCommit  logTopic = "CMIT"
-	dDrop    logTopic = "DROP"
-	dError   logTopic = "ERRO"
-	dInfo    logTopic = "INFO"
-	dLeader  logTopic = "LEAD"
-	dLog     logTopic = "LOG1"
-	DHeart   logTopic = "Heart"
-	DIndex   logTopic = "Index"
-	DSys     logTopic = "SYS"
-	dLog2    logTopic = "LOG2"
-	dPersist logTopic = "PERS"
-	dSnap    logTopic = "SNAP"
-	dTerm    logTopic = "TERM"
-	dTest    logTopic = "TEST"
-	dTimer   logTopic = "TIMR"
-	dTrace   logTopic = "TRCE"
-	dLock    logTopic = "LOCK"
-	dVote    logTopic = "VOTE"
-	dWarn    logTopic = "WARN"
+	dLock   logTopic = "LOCK"
+	dRpc    logTopic = "RPC"
+	dApply  logTopic = "APPLY"
+	dChan   logTopic = "CHAN"
+	dInfo   logTopic = "INFO"
+	dTOut   logTopic = "TIMEOUT"
+	dResp   logTopic = "RESP"
+	dErr    logTopic = "ERROR"
+	dConfig logTopic = "CONFIG"
+	dShard  logTopic = "SHARD"
+	dGC     logTopic = "GC"
 )
 
 // Debugging
@@ -58,7 +49,7 @@ func init() {
 	log.SetFlags(log.Flags() &^ (log.Ldate | log.Ltime))
 }
 
-func Debug(sc *ShardCtrler, topic logTopic, format string, a ...interface{}) {
+func Debug(sc *ShardKV, topic logTopic, format string, a ...interface{}) {
 	if topic == dLock {
 		return
 	}
@@ -67,19 +58,24 @@ func Debug(sc *ShardCtrler, topic logTopic, format string, a ...interface{}) {
 		time /= 100
 		prefix := fmt.Sprintf("%06d %v ", time, string(topic))
 		if sc != nil {
-			prefix += sc.name + " "
+			prefix += fmt.Sprintf("SKV-%d gid: %v ", sc.me, sc.gid)
 		}
 		format = prefix + format
 		log.Printf(format, a...)
 	}
 }
 
-func getServerName(me int) string {
-	return fmt.Sprintf("S%d", me)
-}
-
 func panicIf(cond bool, format string, a ...interface{}) {
 	if cond {
 		panic(fmt.Sprintf(format, a...))
 	}
+}
+func copyMap(Servers map[int][]string) map[int][]string {
+	var ans = make(map[int][]string, len(Servers))
+	for key, val := range Servers {
+		var slic = make([]string, len(val))
+		copy(slic, val)
+		ans[key] = slic
+	}
+	return ans
 }

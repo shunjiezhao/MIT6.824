@@ -1,44 +1,83 @@
 package shardkv
 
+import (
+	"6.5840/shardctrler"
+	"fmt"
+)
+
 //
 // Sharded key/value server.
 // Lots of replica groups, each running Raft.
-// Shardctrler decides which group serves each shard.
-// Shardctrler may change shard assignment from time to time.
+// Shardctrler decides which group serves each Shards.
+// Shardctrler may change Shards assignment from time to time.
 //
 // You will have to modify these definitions.
 //
 
 const (
-	OK             = "OK"
-	ErrNoKey       = "ErrNoKey"
-	ErrWrongGroup  = "ErrWrongGroup"
-	ErrWrongLeader = "ErrWrongLeader"
+	OK                   = "OK"
+	ErrNoKey             = "ErrNoKey"
+	ErrWrongGroup        = "ErrWrongGroup"
+	ErrWrongLeader       = "ErrWrongLeader"
+	ErrTimeOut           = "ErrTimeOut"
+	ErrNotMatchConfigNum = "ErrNotMatchConfigNum"
+	ErrSendLog           = "ErrSendLog"
+	ErrHigh              = "ErrHigh"
+)
+
+const (
+	Get    = "Get"
+	Put    = "Put"
+	Append = "Append"
+	Config = "Config"
 )
 
 type Err string
+type ClientID int64
+type BaseReq struct {
+	ClientID ClientID
+	SeqNum   int64
+}
 
-// Put or Append
-type PutAppendArgs struct {
-	// You'll have to add definitions here.
+type OpArgs struct {
+	BaseReq
+	Type  string
 	Key   string
 	Value string
-	Op    string // "Put" or "Append"
-	// You'll have to add definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
+	Shard int
 }
 
-type PutAppendReply struct {
-	Err Err
+func (o *OpArgs) String() string {
+	return fmt.Sprintf("BaseReq: %v, Type: %v, Key: %v, Value: %v, Shards: %v", o.BaseReq, o.Type, o.Key, o.Value, o.Shard)
 }
 
-type GetArgs struct {
-	Key string
-	// You'll have to add definitions here.
-}
-
-type GetReply struct {
+type OpReply struct {
 	Err   Err
 	Value string
+}
+
+func (o *OpReply) String() string {
+	return fmt.Sprintf("Err: %v, Value: %v", o.Err, o.Value)
+}
+
+type CMDConfigArgs struct {
+	Config shardctrler.Config
+}
+
+func (x *CMDConfigArgs) Clone() *CMDConfigArgs {
+	return &CMDConfigArgs{
+		Config: x.Config.Clone(),
+	}
+}
+
+type CMDMoveShardArgs struct {
+	Shards []int
+	*MoveShardReply
+}
+
+func (x *CMDMoveShardArgs) Clone() *CMDMoveShardArgs {
+	return &CMDMoveShardArgs{
+		Shards:         x.Shards,
+		MoveShardReply: x.MoveShardReply.Clone(),
+	}
 }

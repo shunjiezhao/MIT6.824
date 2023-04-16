@@ -1,15 +1,17 @@
 package shardkv
 
-import "6.5840/porcupine"
-import "6.5840/models"
-import "testing"
+import (
+	"6.5840/models"
+	"6.5840/porcupine"
+	"io/ioutil"
+	"math/rand"
+	"sync"
+	"sync/atomic"
+	"testing"
+)
 import "strconv"
 import "time"
 import "fmt"
-import "sync/atomic"
-import "sync"
-import "math/rand"
-import "io/ioutil"
 
 const linearizabilityCheckTimeout = 1 * time.Second
 
@@ -20,7 +22,7 @@ func check(t *testing.T, ck *Clerk, key string, value string) {
 	}
 }
 
-// test static 2-way sharding, without shard movement.
+// test static 2-way sharding, without Shards movement.
 func TestStaticShards(t *testing.T) {
 	fmt.Printf("Test: static shards ...\n")
 
@@ -45,7 +47,7 @@ func TestStaticShards(t *testing.T) {
 	}
 
 	// make sure that the data really is sharded by
-	// shutting down one shard and checking that some
+	// shutting down one Shards and checking that some
 	// Get()s don't succeed.
 	cfg.ShutdownGroup(1)
 	cfg.checklogs() // forbid snapshots
@@ -80,10 +82,10 @@ func TestStaticShards(t *testing.T) {
 	}
 
 	if ndone != 5 {
-		t.Fatalf("expected 5 completions with one shard dead; got %v\n", ndone)
+		t.Fatalf("expected 5 completions with one Shards dead; got %v\n", ndone)
 	}
 
-	// bring the crashed shard/group back to life.
+	// bring the crashed Shards/group back to life.
 	cfg.StartGroup(1)
 	for i := 0; i < n; i++ {
 		check(t, ck, ka[i], va[i])
@@ -101,6 +103,7 @@ func TestJoinLeave(t *testing.T) {
 	ck := cfg.makeClient()
 
 	cfg.join(0)
+	println("join 0")
 
 	n := 10
 	ka := make([]string, n)
@@ -115,6 +118,7 @@ func TestJoinLeave(t *testing.T) {
 	}
 
 	cfg.join(1)
+	println("join 1")
 
 	for i := 0; i < n; i++ {
 		check(t, ck, ka[i], va[i])
@@ -124,6 +128,7 @@ func TestJoinLeave(t *testing.T) {
 	}
 
 	cfg.leave(0)
+	println("leave 0")
 
 	for i := 0; i < n; i++ {
 		check(t, ck, ka[i], va[i])
@@ -132,11 +137,13 @@ func TestJoinLeave(t *testing.T) {
 		va[i] += x
 	}
 
+	println("append done")
 	// allow time for shards to transfer.
 	time.Sleep(1 * time.Second)
 
 	cfg.checklogs()
 	cfg.ShutdownGroup(0)
+	println("shut down done 0")
 
 	for i := 0; i < n; i++ {
 		check(t, ck, ka[i], va[i])
@@ -236,23 +243,31 @@ func TestMissChange(t *testing.T) {
 	}
 
 	cfg.join(1)
+	println("join 1")
 
 	cfg.ShutdownServer(0, 0)
 	cfg.ShutdownServer(1, 0)
 	cfg.ShutdownServer(2, 0)
+	println("shut down done")
 
 	cfg.join(2)
+	println("join 2")
 	cfg.leave(1)
+	println("leave 1")
 	cfg.leave(0)
+	println("leave 0")
 
 	for i := 0; i < n; i++ {
+		println("check ", i)
 		check(t, ck, ka[i], va[i])
 		x := randstring(20)
 		ck.Append(ka[i], x)
 		va[i] += x
 	}
 
+	println("join 1 begin")
 	cfg.join(1)
+	println("join 1 done")
 
 	for i := 0; i < n; i++ {
 		check(t, ck, ka[i], va[i])
@@ -264,22 +279,27 @@ func TestMissChange(t *testing.T) {
 	cfg.StartServer(0, 0)
 	cfg.StartServer(1, 0)
 	cfg.StartServer(2, 0)
+	println("start done")
 
 	for i := 0; i < n; i++ {
 		check(t, ck, ka[i], va[i])
 		x := randstring(20)
+		println("append ", i)
 		ck.Append(ka[i], x)
 		va[i] += x
 	}
+	println("append done")
 
 	time.Sleep(2 * time.Second)
 
 	cfg.ShutdownServer(0, 1)
 	cfg.ShutdownServer(1, 1)
 	cfg.ShutdownServer(2, 1)
+	println("shut down done")
 
 	cfg.join(0)
 	cfg.leave(2)
+	println("op done")
 
 	for i := 0; i < n; i++ {
 		check(t, ck, ka[i], va[i])
@@ -377,7 +397,7 @@ func TestConcurrent1(t *testing.T) {
 }
 
 // this tests the various sources from which a re-starting
-// group might need to fetch shard contents.
+// group might need to fetch Shards contents.
 func TestConcurrent2(t *testing.T) {
 	fmt.Printf("Test: more concurrent puts and configuration changes...\n")
 
@@ -467,6 +487,7 @@ func TestConcurrent3(t *testing.T) {
 		va[i] = randstring(1)
 		ck.Put(ka[i], va[i])
 	}
+	println("put done")
 
 	var done int32
 	ch := make(chan bool)
@@ -477,6 +498,7 @@ func TestConcurrent3(t *testing.T) {
 			x := randstring(1)
 			ck1.Append(ka[i], x)
 			va[i] += x
+			println("append", i, x)
 		}
 	}
 
@@ -503,6 +525,7 @@ func TestConcurrent3(t *testing.T) {
 		time.Sleep(time.Duration(rand.Int()%900) * time.Millisecond)
 	}
 
+	println("done")
 	time.Sleep(2 * time.Second)
 
 	atomic.StoreInt32(&done, 1)
@@ -730,7 +753,7 @@ func TestUnreliable3(t *testing.T) {
 // optional test to see whether servers are deleting
 // shards for which they are no longer responsible.
 func TestChallenge1Delete(t *testing.T) {
-	fmt.Printf("Test: shard deletion (challenge 1) ...\n")
+	fmt.Printf("Test: Shards deletion (challenge 1) ...\n")
 
 	// "1" means force snapshot after every log entry.
 	cfg := make_config(t, 3, false, 1)
@@ -811,10 +834,10 @@ func TestChallenge1Delete(t *testing.T) {
 }
 
 // optional test to see whether servers can handle
-// shards that are not affected by a config change
-// while the config change is underway
+// shards that are not affected by a preCfg change
+// while the preCfg change is underway
 func TestChallenge2Unaffected(t *testing.T) {
-	fmt.Printf("Test: unaffected shard access (challenge 2) ...\n")
+	fmt.Printf("Test: unaffected Shards access (challenge 2) ...\n")
 
 	cfg := make_config(t, 3, true, 100)
 	defer cfg.cleanup()
@@ -844,9 +867,9 @@ func TestChallenge2Unaffected(t *testing.T) {
 		owned[s] = gid == cfg.groups[1].gid
 	}
 
-	// Wait for migration to new config to complete, and for clients to
-	// start using this updated config. Gets to any key k such that
-	// owned[shard(k)] == true should now be served by group 101.
+	// Wait for migration to new preCfg to complete, and for clients to
+	// start using this updated preCfg. Gets to any key k such that
+	// owned[Shards(k)] == true should now be served by group 101.
 	<-time.After(1 * time.Second)
 	for i := 0; i < n; i++ {
 		if owned[i] {
@@ -862,13 +885,13 @@ func TestChallenge2Unaffected(t *testing.T) {
 	// 101 doesn't get a chance to migrate things previously owned by 100
 	cfg.leave(0)
 
-	// Wait to make sure clients see new config
+	// Wait to make sure clients see new preCfg
 	<-time.After(1 * time.Second)
 
 	// And finally: check that gets/puts for 101-owned keys still complete
 	for i := 0; i < n; i++ {
-		shard := int(ka[i][0]) % 10
-		if owned[shard] {
+		Shards := int(ka[i][0]) % 10
+		if owned[Shards] {
 			check(t, ck, ka[i], va[i])
 			ck.Put(ka[i], va[i]+"-1")
 			check(t, ck, ka[i], va[i]+"-1")
@@ -879,10 +902,10 @@ func TestChallenge2Unaffected(t *testing.T) {
 }
 
 // optional test to see whether servers can handle operations on shards that
-// have been received as a part of a config migration when the entire migration
+// have been received as a part of a preCfg migration when the entire migration
 // has not yet completed.
 func TestChallenge2Partial(t *testing.T) {
-	fmt.Printf("Test: partial migration shard access (challenge 2) ...\n")
+	fmt.Printf("Test: partial migration Shards access (challenge 2) ...\n")
 
 	cfg := make_config(t, 3, true, 100)
 	defer cfg.cleanup()
@@ -926,8 +949,8 @@ func TestChallenge2Partial(t *testing.T) {
 
 	// And finally: check that gets/puts for 101-owned keys now complete
 	for i := 0; i < n; i++ {
-		shard := key2shard(ka[i])
-		if owned[shard] {
+		Shards := key2shard(ka[i])
+		if owned[Shards] {
 			check(t, ck, ka[i], va[i])
 			ck.Put(ka[i], va[i]+"-2")
 			check(t, ck, ka[i], va[i]+"-2")

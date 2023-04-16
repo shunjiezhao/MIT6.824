@@ -5,16 +5,19 @@ package shardkv
 //
 // the client first talks to the shardctrler to find out
 // the assignment of shards (keys) to groups, and then
-// talks to the group that holds the key's shard.
+// talks to the group that holds the key's Shards.
 //
 
-import "6.5840/labrpc"
+import (
+	"6.5840/labrpc"
+	"sync/atomic"
+)
 import "crypto/rand"
 import "math/big"
 import "6.5840/shardctrler"
 import "time"
 
-// which shard is a key in?
+// which Shard is a key in?
 // please use this function,
 // and please do not change it.
 func key2shard(key string) int {
@@ -38,6 +41,8 @@ type Clerk struct {
 	config   shardctrler.Config
 	make_end func(string) *labrpc.ClientEnd
 	// You will have to modify this struct.
+	SeqNum atomic.Int64
+	ClientID
 }
 
 // the tester calls MakeClerk.
@@ -52,64 +57,41 @@ func MakeClerk(ctrlers []*labrpc.ClientEnd, make_end func(string) *labrpc.Client
 	ck.sm = shardctrler.MakeClerk(ctrlers)
 	ck.make_end = make_end
 	// You'll have to add code here.
+	ck.ClientID = ClientID(nrand())
 	return ck
-}
-
-// fetch the current value for a key.
-// returns "" if the key does not exist.
-// keeps trying forever in the face of all other errors.
-// You will have to modify this function.
-func (ck *Clerk) Get(key string) string {
-	args := GetArgs{}
-	args.Key = key
-
-	for {
-		shard := key2shard(key)
-		gid := ck.config.Shards[shard]
-		if servers, ok := ck.config.Groups[gid]; ok {
-			// try each server for the shard.
-			for si := 0; si < len(servers); si++ {
-				srv := ck.make_end(servers[si])
-				var reply GetReply
-				ok := srv.Call("ShardKV.Get", &args, &reply)
-				if ok && (reply.Err == OK || reply.Err == ErrNoKey) {
-					return reply.Value
-				}
-				if ok && (reply.Err == ErrWrongGroup) {
-					break
-				}
-				// ... not ok, or ErrWrongLeader
-			}
-		}
-		time.Sleep(100 * time.Millisecond)
-		// ask controler for the latest configuration.
-		ck.config = ck.sm.Query(-1)
-	}
-
-	return ""
 }
 
 // shared by Put and Append.
 // You will have to modify this function.
-func (ck *Clerk) PutAppend(key string, value string, op string) {
-	args := PutAppendArgs{}
+func (ck *Clerk) Op(key string, value string, op string) string {
+	args := OpArgs{}
+	args.BaseReq = BaseReq{
+		ClientID: ck.ClientID,
+		SeqNum:   ck.SeqNum.Add(1),
+	}
 	args.Key = key
 	args.Value = value
-	args.Op = op
-
+	args.Type = op
 
 	for {
 		shard := key2shard(key)
+		args.Shard = shard
 		gid := ck.config.Shards[shard]
 		if servers, ok := ck.config.Groups[gid]; ok {
 			for si := 0; si < len(servers); si++ {
 				srv := ck.make_end(servers[si])
-				var reply PutAppendReply
-				ok := srv.Call("ShardKV.PutAppend", &args, &reply)
+				var reply OpReply
+				Debug(nil, dInfo, "call group %d", gid)
+				ok = srv.Call("ShardKV.Op", &args, &reply)
+				if !ok {
+					continue
+				}
+
 				if ok && reply.Err == OK {
-					return
+					return reply.Value
 				}
 				if ok && reply.Err == ErrWrongGroup {
+					Debug(nil, dErr, "WrongGroup: %v %v", reply.Err, ck.config.Num)
 					break
 				}
 				// ... not ok, or ErrWrongLeader
@@ -122,8 +104,11 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 }
 
 func (ck *Clerk) Put(key string, value string) {
-	ck.PutAppend(key, value, "Put")
+	ck.Op(key, value, Put)
 }
 func (ck *Clerk) Append(key string, value string) {
-	ck.PutAppend(key, value, "Append")
+	ck.Op(key, value, Append)
+}
+func (ck *Clerk) Get(key string) string {
+	return ck.Op(key, "", Get)
 }

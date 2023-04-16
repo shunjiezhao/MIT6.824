@@ -90,8 +90,8 @@ func (ck *Clerk) Move(shard int, gid int) {
 
 func (ck *Clerk) op(args *OpArgs) OpReply {
 
-	var reply OpReply
 	for {
+		var reply OpReply
 
 		Debug(nil, dClient, "call %d server %s begin", ck.getNext(), args)
 
@@ -104,16 +104,15 @@ func (ck *Clerk) op(args *OpArgs) OpReply {
 			continue
 		}
 
-		Debug(nil, dInfo, "%d call reply %s", ck.getNext(), reply)
+		Debug(nil, dInfo, "%d call args: %s reply %s", ck.getNext(), args, reply)
 		switch reply.Err {
 		case OK:
 			return reply
 		case TimedOut:
 			ck.refreshNext()
-			time.Sleep(time.Millisecond * 200)
+			time.Sleep(time.Millisecond * 50)
 		default:
 			ck.refreshNext()
-			Debug(nil, dClient, "queryL time out")
 		}
 	}
 }
