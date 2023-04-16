@@ -22,6 +22,7 @@ const (
 	ErrTimeOut           = "ErrTimeOut"
 	ErrNotMatchConfigNum = "ErrNotMatchConfigNum"
 	ErrSendLog           = "ErrSendLog"
+	ErrLow               = "ErrLOw"
 )
 
 const (

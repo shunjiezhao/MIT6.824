@@ -53,8 +53,12 @@ func (sk *ShardKV) MoveShard(args *MoveShardArgs, reply *MoveShardReply) {
 	}
 
 	// configNum match
-	panicIf(args.ConfigNum != curNum, fmt.Sprintf("preCfg num not match %v", curNum))
-	panicIf(sk.store[args.Shard].Status != Delete, fmt.Sprintf("Shards status not match %v", sk.store[args.Shard].Status))
+	//panicIf(sk.store[args.Shard].Status != Delete, "args:%+v\ncufcfg:%+v\nShards status not match %v", args, sk.curCfg, sk.store[args.Shard].Status)
+	//去掉这里是因为，当宕机时，重新进来时，可能没有更新到最新的配置，导致这里出错
+	if sk.store[args.Shard].Status != Delete {
+		reply.Err = ErrLow
+		return
+	}
 
 	//拷贝信息
 	reply.Err = OK
