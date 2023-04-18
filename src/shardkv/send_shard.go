@@ -113,11 +113,12 @@ func (sk *ShardKV) shardConsumer() {
 	sk.Lock("Shards consumer")
 	wg := &sync.WaitGroup{}
 	gr := sk.getShardGrByStateL(Pulling)
-	Debug(sk, dInfo, "get pull Shards map:%+v", gr)
+	if len(gr) != 0 {
+		Debug(sk, dInfo, "get pull Shards map:%+v", gr)
+	}
 	for gid, shards := range gr {
 		Debug(sk, dInfo, "pull Shards1 %v from %v", shards, sk.preCfg.Groups[gid])
 		wg.Add(1)
-
 		go func(num int, shard []int, servers []string) {
 			defer wg.Done()
 			Debug(sk, dInfo, "pull Shards2 %v", shard)
@@ -138,6 +139,7 @@ func (sk *ShardKV) shardConsumer() {
 
 				if reply.Err == OK {
 					sk.Exec(&CMDMoveShardArgs{shard, reply.Clone()}, &OpReply{})
+					break
 				}
 
 				if reply.Err == ErrWrongLeader {

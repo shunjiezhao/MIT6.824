@@ -18,7 +18,7 @@ func (sk *ShardKV) PullConfig() {
 	sk.UnLock("check pull Shards")
 
 	newConfig := sk.sm.Query(nextNum)
-	Debug(sk, dInfo, "pull config  %+v\n ", newConfig)
+	Debug(sk, dInfo, "pull config num:%d %+v\n\n", nextNum, newConfig)
 	if newConfig.Num == nextNum {
 		newConfig = newConfig.Clone()
 		args := &CMDConfigArgs{

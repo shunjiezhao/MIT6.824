@@ -35,8 +35,7 @@ func (sc *ShardKV) apply() {
 			panic("invalid msg")
 		}
 		if sc.shouldSnapShotL() {
-			snapshot := sc.GetSnapshot()
-			go sc.rf.Snapshot(msg.CommandIndex, snapshot)
+			sc.rf.Snapshot(msg.CommandIndex, sc.GetSnapshot())
 		}
 	}
 }

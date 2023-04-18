@@ -17,6 +17,7 @@ func (kv *ShardKV) Exec(msg any, reply *OpReply) {
 		reply.Err = ErrWrongLeader
 		return
 	}
+	Debug(kv, dInfo, "start exec: %v", msg)
 
 	kv.Lock("get ch")
 	var ch chan OpReply
@@ -30,7 +31,7 @@ func (kv *ShardKV) Exec(msg any, reply *OpReply) {
 
 	panicIf(ch == nil, "ch is nil")
 	select {
-	case <-time.After(time.Millisecond * 500):
+	case <-time.After(time.Millisecond * 70):
 		Debug(kv, dTOut, "handle req timeout: req: %+v", msg)
 		reply.Err = ErrTimeOut
 	case resp := <-ch:

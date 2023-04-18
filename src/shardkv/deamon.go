@@ -9,11 +9,7 @@ func (sk *ShardKV) Deamon(do func(), shouldGO bool) {
 		if !leader {
 			continue
 		}
-		if shouldGO {
-			go do()
-		} else {
-			do()
-		}
+		do()
 	}
 
 }
