@@ -34,6 +34,9 @@ import (
 	"6.5840/labrpc"
 )
 
+type EmptyLog struct {
+}
+
 // as each Raft peer becomes aware that successive Log entries are
 // committed, the peer should send an ApplyMsg to the service (or
 // tester) on the same server, via the applyCh passed to Make(). set
@@ -392,6 +395,7 @@ func (rf *Raft) Name() string {
 func Make(peers []*labrpc.ClientEnd, me int,
 	persister *Persister, applyCh chan ApplyMsg) *Raft {
 	runtime.GOMAXPROCS(8)
+	labgob.Register(EmptyLog{})
 
 	rf := &Raft{}
 	rf.peers = peers
@@ -518,6 +522,10 @@ func (rf *Raft) apply() {
 		appIdx := rf.lastApplied
 		Debug(rf, dClient, "want to apply idx %d Log %+v", rf.lastApplied, rf.Log.entryAt(rf.lastApplied))
 		rf.Unlock(local)
+		if _, ok := msg.Command.(EmptyLog); ok {
+			Debug(rf, dLog, "empty log", appIdx)
+			continue
+		}
 		rf.applyCh <- msg
 		Debug(rf, dClient, "apply idx %d Log success", appIdx)
 	}

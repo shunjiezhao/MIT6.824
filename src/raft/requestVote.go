@@ -136,6 +136,11 @@ func (rf *Raft) becomeLeaderThenDoL() {
 	//TODO: need to  persist
 	rf.persist()
 	rf.freshNextSliceL()
+	entry := LogEntry{
+		Term:    rf.CurrentTerm,
+		Command: EmptyLog{},
+	}
+	rf.AppendLogL(entry)
 	rf.AppendMsgL(true) // 发送心跳
 }
 

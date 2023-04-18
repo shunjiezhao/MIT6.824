@@ -7,10 +7,15 @@ import (
 // deamon
 func (sc *ShardKV) apply() {
 	for msg := range sc.applyCh {
-		Debug(sc, dApply, "apply msg: %v", msg)
 		if msg.SnapshotValid == true {
+			sc.Lock("snapshot")
+			Debug(sc, dApply, "apply snapShot: [%v:%v]", msg.SnapshotTerm, msg.SnapshotIndex)
 			sc.InstallSnapshot(msg.Snapshot)
+			sc.snapShotIndex = msg.SnapshotIndex
+			sc.UnLock("snapshot")
+
 		} else if msg.CommandValid == true {
+			Debug(sc, dApply, "apply msg: %v", msg)
 			var reply OpReply
 			switch msg.Command.(type) {
 			case CMDConfigArgs:

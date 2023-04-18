@@ -21,14 +21,15 @@ type ShardKV struct {
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
-	lastExec   map[ClientID]LastOpInfo
-	ResponseCh map[int]chan OpReply
-	store      map[int]*Shard // Shard -> Store
-	sm         *shardctrler.Clerk
-	preCfg     shardctrler.Config // isNew?
-	curCfg     shardctrler.Config
-	persister  *raft.Persister
-	kill       atomic.Int64
+	lastExec      map[ClientID]LastOpInfo
+	ResponseCh    map[int]chan OpReply
+	store         map[int]*Shard // Shard -> Store
+	sm            *shardctrler.Clerk
+	preCfg        shardctrler.Config // isNew?
+	curCfg        shardctrler.Config
+	persister     *raft.Persister
+	kill          atomic.Int64
+	snapShotIndex int
 }
 
 // the tester calls Kill() when a ShardKV instance won't
