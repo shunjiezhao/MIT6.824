@@ -11,7 +11,6 @@ func (sc *ShardKV) apply() {
 			sc.Lock("snapshot")
 			Debug(sc, dApply, "apply snapShot: [%v:%v]", msg.SnapshotTerm, msg.SnapshotIndex)
 			sc.InstallSnapshot(msg.Snapshot)
-			sc.snapShotIndex = msg.SnapshotIndex
 			sc.UnLock("snapshot")
 
 		} else if msg.CommandValid == true {
@@ -88,6 +87,7 @@ func (sc *ShardKV) consumeOP(msg raft.ApplyMsg, reply *OpReply) {
 
 	_, isLeader := sc.rf.GetState()
 	if isLeader == false {
+		reply.Err = ErrWrongLeader
 		return
 	}
 

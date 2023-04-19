@@ -51,6 +51,12 @@ func copyClientInfo(clientInfo map[ClientID]LastOpInfo) map[ClientID]LastOpInfo 
 
 // 如果发现大于当前的配置，我们不传，如果发现小于，我们传
 func (sk *ShardKV) MoveShard(args *MoveShardArgs, reply *MoveShardReply) {
+	_, leader := sk.rf.GetState()
+	if !leader {
+		reply.Err = ErrWrongLeader
+		return
+	}
+
 	sk.Lock("move Shards rpc")
 	defer func() {
 		sk.UnLock("move Shards rpc")
@@ -110,52 +116,52 @@ func (sk *ShardKV) ShardStatus() string {
 
 // deamon
 func (sk *ShardKV) shardConsumer() {
+
 	sk.Lock("Shards consumer")
 	wg := &sync.WaitGroup{}
 	gr := sk.getShardGrByStateL(Pulling)
-	if len(gr) != 0 {
-		Debug(sk, dInfo, "get pull Shards map:%+v", gr)
+	sk.UnLock("Shards consumer")
+	if len(gr) == 0 {
+		return
 	}
+
+	Debug(sk, dInfo, "get pull Shards map:%+v", gr)
 	for gid, shards := range gr {
 		Debug(sk, dInfo, "pull Shards1 %v from %v", shards, sk.preCfg.Groups[gid])
 		wg.Add(1)
-		go func(num int, shard []int, servers []string) {
-			defer wg.Done()
-			Debug(sk, dInfo, "pull Shards2 %v", shard)
-			for si := 0; si < len(servers); si++ {
-				println("call22 server", si)
-				srv := sk.make_end(servers[si])
-				var args = MoveShardArgs{
-					Shard:     shard,
-					ConfigNum: num,
-				}
-				var reply MoveShardReply
-
-				ok := srv.Call("ShardKV.MoveShard", &args, &reply)
-				Debug(sk, dRpc, "call MoveShard to %v ok: %v args:%+v reply:%+v", servers[si], ok, args, reply)
-				if !ok {
-					continue
-				}
-
-				if reply.Err == OK {
-					sk.Exec(&CMDMoveShardArgs{shard, reply.Clone()}, &OpReply{})
-					break
-				}
-
-				if reply.Err == ErrWrongLeader {
-					continue
-				}
-				if reply.Err == ErrHigh || reply.Err == ErrNotMatchConfigNum {
-					break //太高了下轮再试把
-				}
-			}
-
-		}(sk.curCfg.Num, shards, sk.preCfg.Groups[gid])
+		sk.sendHelper(wg, sk.curCfg.Num, shards, sk.preCfg.Groups[gid])
 	}
-	sk.UnLock("Shards consumer")
 	wg.Wait()
 }
 
+func (sk *ShardKV) sendHelper(wg *sync.WaitGroup, num int, shard []int, servers []string) {
+	sk.Do(func() {
+
+		defer wg.Done()
+		Debug(sk, dInfo, "pull Shards2 %v", shard)
+		for si := 0; si < len(servers); si++ {
+			println("call22 server", si)
+			srv := sk.make_end(servers[si])
+			var args = MoveShardArgs{
+				Shard:     shard,
+				ConfigNum: num,
+			}
+			var reply MoveShardReply
+
+			ok := srv.Call("ShardKV.MoveShard", &args, &reply)
+			Debug(sk, dRpc, "call MoveShard to %v ok: %v args:%+v reply:%+v", servers[si], ok, args, reply)
+
+			if ok && reply.Err == OK {
+				sk.Exec(&CMDMoveShardArgs{shard, reply.Clone()}, &OpReply{})
+				return
+			}
+			if reply.Err == ErrTimeOut {
+				break
+			}
+		}
+	})
+
+}
 func (sk *ShardKV) applyShardDataC(args *CMDMoveShardArgs, reply *OpReply) {
 	moveReply := args.MoveShardReply
 
@@ -178,7 +184,7 @@ func (sk *ShardKV) applyShardDataC(args *CMDMoveShardArgs, reply *OpReply) {
 			sk.store[sid].Status = GC
 			Debug(sk, dShard, "change shard %v status to GC", sid)
 		} else {
-			break //这一轮早已经处理完了
+			continue //这一轮早已经处理完了
 		}
 	}
 
