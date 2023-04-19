@@ -43,6 +43,7 @@ type Clerk struct {
 	// You will have to modify this struct.
 	SeqNum atomic.Int64
 	ClientID
+	leader map[int]int
 }
 
 // the tester calls MakeClerk.
@@ -58,6 +59,7 @@ func MakeClerk(ctrlers []*labrpc.ClientEnd, make_end func(string) *labrpc.Client
 	ck.make_end = make_end
 	// You'll have to add code here.
 	ck.ClientID = ClientID(nrand())
+	ck.leader = make(map[int]int)
 	return ck
 }
 
@@ -78,12 +80,13 @@ func (ck *Clerk) Op(key string, value string, op string) string {
 		args.Shard = shard
 		gid := ck.config.Shards[shard]
 		if servers, ok := ck.config.Groups[gid]; ok {
-			for si := 0; si < len(servers); si++ {
-				srv := ck.make_end(servers[si])
+			for {
+				srv := ck.make_end(servers[ck.leader[gid]])
 				var reply OpReply
 				Debug(nil, dInfo, "call group %d", gid)
 				ok = srv.Call("ShardKV.Op", &args, &reply)
 				if !ok {
+					ck.leader[gid] = int(nrand()) % len(servers)
 					continue
 				}
 
@@ -95,6 +98,13 @@ func (ck *Clerk) Op(key string, value string, op string) string {
 					break
 				}
 				// ... not ok, or ErrWrongLeader
+				if reply.Err == ErrWrongLeader {
+					ck.leader[gid] = int(nrand()) % len(servers)
+					continue
+				}
+				if reply.Err == ErrNoKey {
+					return ""
+				}
 			}
 		}
 		time.Sleep(100 * time.Millisecond)
