@@ -112,7 +112,7 @@ const (
 	Follower = iota
 	Candidate
 	Leader
-	heartTime    = time.Millisecond * 50
+	heartTime    = time.Millisecond * 150
 	heartTimeOut = time.Second
 )
 
