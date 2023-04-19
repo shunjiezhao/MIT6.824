@@ -7,10 +7,14 @@ import (
 // deamon
 func (sc *ShardKV) apply() {
 	for msg := range sc.applyCh {
-		Debug(sc, dApply, "apply msg: %v", msg)
 		if msg.SnapshotValid == true {
+			sc.Lock("snapshot")
+			Debug(sc, dApply, "apply snapShot: [%v:%v]", msg.SnapshotTerm, msg.SnapshotIndex)
 			sc.InstallSnapshot(msg.Snapshot)
+			sc.UnLock("snapshot")
+
 		} else if msg.CommandValid == true {
+			Debug(sc, dApply, "apply msg: %v", msg)
 			var reply OpReply
 			switch msg.Command.(type) {
 			case CMDConfigArgs:
@@ -35,8 +39,7 @@ func (sc *ShardKV) apply() {
 			panic("invalid msg")
 		}
 		if sc.shouldSnapShotL() {
-			snapshot := sc.GetSnapshot()
-			go sc.rf.Snapshot(msg.CommandIndex, snapshot)
+			sc.rf.Snapshot(msg.CommandIndex, sc.GetSnapshot())
 		}
 	}
 }
@@ -84,6 +87,7 @@ func (sc *ShardKV) consumeOP(msg raft.ApplyMsg, reply *OpReply) {
 
 	_, isLeader := sc.rf.GetState()
 	if isLeader == false {
+		reply.Err = ErrWrongLeader
 		return
 	}
 

@@ -5,7 +5,8 @@ package main
 //
 
 import "time"
-import "6.5840/viewservice"
+
+//import "6.5840/viewservice"
 import "os"
 import "fmt"
 
@@ -15,7 +16,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	viewservice.StartServer(os.Args[1])
+	//viewservice.StartServer(os.Args[1])
 
 	for {
 		time.Sleep(100 * time.Second)

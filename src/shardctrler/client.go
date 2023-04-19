@@ -7,8 +7,8 @@ package shardctrler
 import (
 	"6.5840/labrpc"
 	"sync/atomic"
+	"time"
 )
-import "time"
 import "crypto/rand"
 import "math/big"
 
@@ -109,8 +109,7 @@ func (ck *Clerk) op(args *OpArgs) OpReply {
 		case OK:
 			return reply
 		case TimedOut:
-			ck.refreshNext()
-			time.Sleep(time.Millisecond * 50)
+			time.Sleep(100 * time.Millisecond)
 		default:
 			ck.refreshNext()
 		}

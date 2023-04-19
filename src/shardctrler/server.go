@@ -19,9 +19,9 @@ type ShardCtrler struct {
 
 	configs    []Config // indexed by config num
 	name       string
-	lastExec   map[ClientID]int64             // 1
-	resultChan map[int]chan OpReply           // 2
-	Result     map[ClientID]map[int64]OpReply // 6
+	lastExec   map[ClientID]int64   // 1
+	resultChan map[int]chan OpReply // 2
+	Result     map[ClientID]OpReply // 6
 	Shards     map[int][]int
 }
 
@@ -50,15 +50,11 @@ func (sc *ShardCtrler) Op(args *OpArgs, reply *OpReply) {
 	defer func() {
 		Debug(sc, dInfo, "OP args: %s reply: %v", args, reply)
 	}()
-	if _, ok := sc.Result[args.ClientID]; !ok {
-		sc.Result[args.ClientID] = map[int64]OpReply{}
-	}
-	// 1. check if already executed
-	clientRes := sc.Result[args.ClientID]
-	if res, ok := clientRes[args.SeqNum]; ok {
-		reply.Err = res.Err
-		reply.Config = res.Config
-		reply.WrongLeader = res.WrongLeader
+	if sc.lastExec[args.ClientID] == args.SeqNum {
+		opReply := sc.Result[args.ClientID]
+		reply.Err = opReply.Err
+		reply.Config = opReply.Config
+		reply.WrongLeader = opReply.WrongLeader
 		Debug(sc, dInfo, "repeat")
 		sc.UnLock("OP-result")
 		return
@@ -126,9 +122,9 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister)
 	sc.name = fmt.Sprintf("SC-%d", me)
 
 	// Your code here.
-	sc.lastExec = map[ClientID]int64{}               // 1
-	sc.resultChan = make(map[int]chan OpReply)       // 2
-	sc.Result = make(map[ClientID]map[int64]OpReply) // 6
+	sc.lastExec = map[ClientID]int64{}         // 1
+	sc.resultChan = make(map[int]chan OpReply) // 2
+	sc.Result = make(map[ClientID]OpReply)     // 6
 	sc.Shards = make(map[int][]int)
 	Debug(sc, dInfo, "StartServer me: %v", me)
 

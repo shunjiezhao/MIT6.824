@@ -134,6 +134,11 @@ func (rf *Raft) becomeLeaderThenDoL() {
 	rf.LeaderId = rf.me
 	rf.state = Leader
 	//TODO: need to  persist
+	entry := LogEntry{
+		Term:    rf.CurrentTerm,
+		Command: EmptyLog{},
+	}
+	rf.AppendLogL(entry)
 	rf.persist()
 	rf.freshNextSliceL()
 	rf.AppendMsgL(true) // 发送心跳

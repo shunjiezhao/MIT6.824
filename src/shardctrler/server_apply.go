@@ -38,20 +38,14 @@ func (sc *ShardCtrler) consumeOP(msg raft.ApplyMsg) {
 			reply = sc.queryL(op)
 		}
 
-		if sc.Result[op.ClientID] == nil {
-			sc.Result[op.ClientID] = map[int64]OpReply{}
-		}
-		if _, ok := sc.Result[op.ClientID][op.SeqNum]; !ok {
-			sc.Result[op.ClientID][op.SeqNum] = reply
-		}
-
 		ch = sc.resultChan[msg.CommandIndex]
+		sc.Result[op.ClientID] = reply
 		_, isLeader := sc.rf.GetState()
 		if isLeader == false {
 			return
 		}
 	} else {
-		reply = sc.Result[op.ClientID][op.SeqNum]
+		reply = sc.Result[op.ClientID]
 	}
 	go func(reply OpReply) {
 		Debug(sc, dInfo, "send response: %+v", reply)

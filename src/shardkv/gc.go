@@ -2,7 +2,6 @@ package shardkv
 
 import (
 	"sync"
-	"time"
 )
 
 // GC /pull
@@ -14,6 +13,12 @@ type AckArgs struct {
 // 对方并不需要知道配置号，
 // 返回成功，对方那边有自己的配置号
 func (sk *ShardKV) Ack(args *AckArgs, reply *OpReply) {
+	_, leader := sk.rf.GetState()
+	if !leader {
+		reply.Err = ErrWrongLeader
+		return
+	}
+
 	sk.Lock("ack rpc")
 	defer func() {
 		Debug(sk, dGC, "ack rpc args: %+v reply: %+v", args, reply)
@@ -62,43 +67,43 @@ func (kv *ShardKV) applyAck(args *AckArgs, reply *OpReply) {
 
 // deamon
 func (sk *ShardKV) GCconsumer() {
-	wg := sync.WaitGroup{}
+	wg := &sync.WaitGroup{}
 	sk.Lock("gcing")
 	gc := sk.getShardGrByStateL(GC)
+	sk.UnLock("gcing")
+	if len(gc) == 0 {
+		return
+	}
 
 	for gid, sids := range gc {
 		wg.Add(1)
-		go func(num int, shard []int, servers []string) {
-			defer wg.Done()
-			Debug(sk, dGC, "[GC] Shards %v", shard)
-			for si := 0; si < len(servers); si++ {
-				srv := sk.make_end(servers[si])
-				var args = AckArgs{
-					Shard:     shard,
-					ConfigNum: num,
-				}
-				var ok bool
-				var reply OpReply
-				ok = srv.Call("ShardKV.Ack", &args, &reply)
-				Debug(sk, dRpc, "call Ack args: %+v reply: %s ", args, reply)
-				if !ok {
-					continue
-				}
-				if reply.Err == OK {
-					sk.Exec(&args, &OpReply{})
-				}
-				if reply.Err == ErrTimeOut {
-					time.Sleep(10 * time.Millisecond)
-					continue
-				}
-
-				if ok && reply.Err == ErrWrongLeader {
-					continue
-				}
-			}
-
-		}(sk.curCfg.Num, sids, sk.preCfg.Groups[gid])
+		sk.gcHelper(wg, sk.curCfg.Num, sids, sk.preCfg.Groups[gid])
 	}
-	sk.UnLock("gcing")
 	wg.Wait()
+}
+
+func (sk *ShardKV) gcHelper(wg *sync.WaitGroup, num int, shard []int, servers []string) {
+	sk.Do(func() {
+		defer wg.Done()
+		Debug(sk, dGC, "[GC] Shards %v", shard)
+		for si := 0; si < len(servers); si++ {
+			srv := sk.make_end(servers[si])
+			var args = AckArgs{
+				Shard:     shard,
+				ConfigNum: num,
+			}
+			var ok bool
+			var reply OpReply
+			ok = srv.Call("ShardKV.Ack", &args, &reply)
+			Debug(sk, dRpc, "call Ack ok:%v args: %+v reply: %s ", ok, args, reply)
+			if ok && reply.Err == OK {
+				sk.Exec(&args, &OpReply{})
+				return
+			}
+			if reply.Err == ErrTimeOut {
+				break
+			}
+		}
+	})
+
 }
