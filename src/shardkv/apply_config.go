@@ -20,7 +20,6 @@ func (sk *ShardKV) PullConfig() {
 	newConfig := sk.sm.Query(nextNum)
 	Debug(sk, dInfo, "pull config num:%d %+v\n\n", nextNum, newConfig)
 	if newConfig.Num == nextNum {
-		newConfig = newConfig.Clone()
 		args := &CMDConfigArgs{
 			Config: newConfig,
 		}

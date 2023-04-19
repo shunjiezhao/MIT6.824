@@ -31,7 +31,7 @@ func (kv *ShardKV) Exec(msg any, reply *OpReply) {
 
 	panicIf(ch == nil, "ch is nil")
 	select {
-	case <-time.After(time.Millisecond * 70):
+	case <-time.After(time.Millisecond * 50):
 		Debug(kv, dTOut, "handle req timeout: req: %+v", msg)
 		reply.Err = ErrTimeOut
 	case resp := <-ch:

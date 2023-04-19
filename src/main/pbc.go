@@ -18,7 +18,7 @@ package main
 // and restart them to exercise fault tolerance.
 //
 
-import "6.5840/pbservice"
+//import "6.5840/pbservice"
 import "os"
 import "fmt"
 
@@ -31,8 +31,8 @@ func usage() {
 func main() {
 	if len(os.Args) == 3 {
 		// get
-		ck := pbservice.MakeClerk(os.Args[1], "")
-		v := ck.Get(os.Args[2])
+		//ck := pbservice.MakeClerk(os.Args[1], "")
+		//v := ck.Get(os.Args[2])
 		fmt.Printf("%v\n", v)
 	} else if len(os.Args) == 4 {
 		// put

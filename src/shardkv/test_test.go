@@ -146,6 +146,7 @@ func TestJoinLeave(t *testing.T) {
 	println("shut down done 0")
 
 	for i := 0; i < n; i++ {
+		println("check", i)
 		check(t, ck, ka[i], va[i])
 	}
 

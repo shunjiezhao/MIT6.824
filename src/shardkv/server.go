@@ -11,7 +11,7 @@ import "sync"
 import "6.5840/labgob"
 
 type ShardKV struct {
-	mu           sync.Mutex
+	mu           sync.RWMutex
 	me           int
 	rf           *raft.Raft
 	applyCh      chan raft.ApplyMsg
@@ -30,6 +30,7 @@ type ShardKV struct {
 	persister     *raft.Persister
 	kill          atomic.Int64
 	snapShotIndex int
+	*Pool
 }
 
 // the tester calls Kill() when a ShardKV instance won't
@@ -113,6 +114,7 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister,
 		kv.curCfg.Shards[i] = -1
 	}
 	kv.preCfg = kv.curCfg
+	kv.Pool = NewPool()
 
 	kv.start()
 	snapshot := persister.ReadSnapshot()
@@ -124,6 +126,18 @@ func (kv *ShardKV) start() {
 	go kv.Deamon(kv.shardConsumer, true)
 	go kv.Deamon(kv.GCconsumer, true)
 	go kv.apply()
+}
+func (sc *ShardKV) RLock(locate string) {
+	micro := time.Now().UnixMicro()
+	Debug(sc, dLock, "Pre-RLock: %v on %v", locate, micro)
+	sc.mu.RLock()
+	Debug(sc, dLock, "Done-RLock: %v on %v", locate, micro)
+}
+func (sc *ShardKV) RUnLock(locate string) {
+	micro := time.Now().UnixMicro()
+	Debug(sc, dLock, "Pre-RUnLock: %v on %v", locate, micro)
+	sc.mu.RUnlock()
+	Debug(sc, dLock, "Done-RUnLock: %v on %v", locate, micro)
 }
 
 func (sc *ShardKV) Lock(locate string) {
