@@ -55,7 +55,7 @@ func (sc *ShardCtrler) getMaxShardCountGIDL() int {
 	return id
 }
 func (sc *ShardCtrler) getMinShardCountGIDL() int {
-	var mn int = NShards + 1
+	var mn = NShards + 1
 	var id int
 	count := sc.getExistShardSortKeyL()
 	for _, gid := range count {
@@ -114,11 +114,4 @@ func max(a, b int) int {
 		return a
 	}
 	return b
-}
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-
 }

@@ -17,7 +17,6 @@ const (
 	dChan   logTopic = "CHAN"
 	dInfo   logTopic = "INFO"
 	dTOut   logTopic = "TIMEOUT"
-	dResp   logTopic = "RESP"
 	dErr    logTopic = "ERROR"
 	dConfig logTopic = "CONFIG"
 	dShard  logTopic = "SHARD"
@@ -69,13 +68,4 @@ func panicIf(cond bool, format string, a ...interface{}) {
 	if cond {
 		panic(fmt.Sprintf(format, a...))
 	}
-}
-func copyMap(Servers map[int][]string) map[int][]string {
-	var ans = make(map[int][]string, len(Servers))
-	for key, val := range Servers {
-		var slic = make([]string, len(val))
-		copy(slic, val)
-		ans[key] = slic
-	}
-	return ans
 }

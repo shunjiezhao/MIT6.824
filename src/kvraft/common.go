@@ -38,25 +38,6 @@ func (r BaseResp) String() string {
 	return fmt.Sprintf("status: %v response: %v leaderHint: %v", r.Status, r.Response, r.LeaderId)
 }
 
-//type GetArgs struct {
-//	BaseReq
-//	Key string
-//	ClientInfo
-//	// You'll have to add definitions here.
-//}
-//
-//func (r GetArgs) String() string {
-//	return fmt.Sprintf("GetArgs: %s key: %v", r.BaseReq, r.Key)
-//}
-//
-//type GetReply struct {
-//	BaseResp
-//}
-//
-//func (r GetReply) String() string {
-//	return fmt.Sprintf("GetReply: status: %v response: %v leaderHint: %v", r.Status, r.Response, r.LeaderId)
-//}
-
 type OpArgs struct {
 	BaseReq
 	Key, Value string

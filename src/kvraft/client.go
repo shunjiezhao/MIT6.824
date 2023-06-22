@@ -73,9 +73,6 @@ func (ck *Clerk) Get(key string) string {
 // must match the declared types of the RPC handler function's
 // arguments. and reply must be passed as a pointer.
 func (ck *Clerk) Op(key string, value string, op string) string {
-	defer func() {
-		Debug(nil, dInfo, "%s success", op)
-	}()
 	var req = OpArgs{
 		BaseReq: BaseReq{
 			ClientID: ck.ID,
@@ -94,7 +91,6 @@ func (ck *Clerk) Op(key string, value string, op string) string {
 
 		var call bool
 		call = ck.servers[ck.getNext()].Call("KVServer.Op", &req, &reply)
-		// You will have to modify this function.
 		if !call {
 			Debug(nil, dWarn, "call %v false", ck.getNext())
 			ck.refreshNext()

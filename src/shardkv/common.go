@@ -21,7 +21,6 @@ const (
 	ErrWrongLeader       = "ErrWrongLeader"
 	ErrTimeOut           = "ErrTimeOut"
 	ErrNotMatchConfigNum = "ErrNotMatchConfigNum"
-	ErrSendLog           = "ErrSendLog"
 	ErrHigh              = "ErrHigh"
 )
 

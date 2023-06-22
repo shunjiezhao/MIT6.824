@@ -17,7 +17,6 @@ func (s ShardStatus) String() string {
 	case Pulling:
 		return "Pulling"
 	case Delete:
-
 		return "Delete"
 	case GC:
 		return "GC"

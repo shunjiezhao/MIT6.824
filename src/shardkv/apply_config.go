@@ -2,7 +2,6 @@ package shardkv
 
 import (
 	"6.5840/shardctrler"
-	"fmt"
 )
 
 // deamon
@@ -34,7 +33,6 @@ func (sc *ShardKV) configProducerC(cfg *CMDConfigArgs, reply *OpReply) {
 	Debug(sc, dInfo, "config producer cur: %+v cfg:%+v", sc.curCfg, cfg)
 
 	if sc.curCfg.Num+1 != cfg.Config.Num {
-		Debug(sc, dTOut, "正在拉取配置，不需要更新")
 		reply.Err = ErrNotMatchConfigNum
 		return
 	}
@@ -47,7 +45,6 @@ func (sc *ShardKV) configProducerC(cfg *CMDConfigArgs, reply *OpReply) {
 	sc.curCfg = cfg.Config
 
 	reply.Err = OK
-	panicIf(sc.curCfg.Num != sc.preCfg.Num+1, fmt.Sprintf("config num not match pull:%v now:%v", sc.curCfg.Num, sc.preCfg.Num))
 	if sc.curCfg.Num != 1 {
 		var nowMes = make([]int, 0)
 		var preMes = make([]int, 0)

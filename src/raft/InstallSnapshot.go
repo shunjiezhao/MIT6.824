@@ -64,7 +64,6 @@ func (rf *Raft) sendSnapshotLG(server int) {
 		Data:              rf.persister.ReadSnapshot(),
 	}
 	Debug(rf, dSnap, "-> %s %s", getServerName(server), args)
-	panicIf(len(args.Data) == 0, "snap shot is nil")
 	go rf.sendSnapShot(server, &args)
 }
 

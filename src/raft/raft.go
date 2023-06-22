@@ -135,11 +135,7 @@ func (rf *Raft) GetState() (int, bool) {
 	local := getLocal("get state")
 	rf.Lock(local)
 	defer rf.Unlock(local)
-
-	// Your code here (2A).
-	var term = rf.CurrentTerm
-	var isleader = rf.state == Leader
-	return term, isleader
+	return rf.CurrentTerm, rf.state == Leader
 }
 
 func (rf *Raft) GetLeader() int {
@@ -320,7 +316,6 @@ func (rf *Raft) AppendLogL(log LogEntry) {
 	// 做一个 广播， 并且呢通知自己 有东西到来
 	log.Index = rf.Log.lastLogIndex() + 1
 	rf.Log.append(log)
-
 }
 
 // the tester doesn't halt goroutines created by Raft after each test,
@@ -334,11 +329,6 @@ func (rf *Raft) AppendLogL(log LogEntry) {
 // should call killed() to check whether it should stop.
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
-	// Your code here, if desired.
-	local := getLocal("kill")
-	rf.Lock(local)
-	Debug(nil, DSys, "Killed %v", rf.State())
-	rf.Unlock(local)
 }
 
 func (rf *Raft) killed() bool {
@@ -418,7 +408,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.CurrentTerm = 0
 	rf.retryElectionRefresh()
 
-	//rf.timeTicker = time.NewTicker(getRandTime())
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 	rf.readSnapShot(persister.ReadSnapshot())
@@ -476,7 +465,6 @@ func (rf *Raft) becameFollower(term int) {
 	rf.CurrentTerm = term
 	rf.VotedFor = -1
 	rf.LeaderId = -1
-	//TODO: need to persist
 	rf.persist()
 }
 
@@ -539,7 +527,6 @@ func (rf *Raft) shouldApplyL() bool {
 		return false
 	}
 	// start and last index
-
 	return true
 }
 

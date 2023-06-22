@@ -82,7 +82,6 @@ func (l *Log) cut2end(x int) {
 
 // return the first index >= term
 func (l *Log) search(term int) int {
-	panicIf(term < 0, "term is negative")
 	idx := sort.Search(len(l.Logs), func(i int) bool {
 		return l.Logs[i].Term >= term
 	}) + l.Start
@@ -93,12 +92,9 @@ func (l *Log) search(term int) int {
 }
 
 func (l *Log) TermLastIndex(term int) int {
-	panicIf(l.contain(term) == false, "log don't contain this term")
-	panicIf(term < 0, "term is negative")
 	idx := sort.Search(len(l.Logs), func(i int) bool {
 		return l.Logs[i].Term > term
 	}) - 1 + l.Start
-	panicIf(l.entryAt(idx).Term != term, "leader should have this term")
 	return idx
 }
 
